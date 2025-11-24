@@ -1,0 +1,40 @@
+.DS_Store
+Thumbs.db
+*.log
+node_modules/
+.idea/
+*.zip
+
+# Development artifacts (moved from plugin root)
+dev-artifacts/
+
+# Vendor dependencies (installed via composer)
+vendor/
+
+# Backup files
+*.bak
+*.backup
+*.original
+*.tmp
+
+# Temporary files
+*.swp
+*.swo
+*~
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# PHPUnit cache (generated during tests, not needed in production)
+.phpunit.cache/
+.phpunit.result.cache
+
+# Composer phar (not needed in Git)
+composer.phar
+

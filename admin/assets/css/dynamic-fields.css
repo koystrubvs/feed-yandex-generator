@@ -1,0 +1,213 @@
+/**
+ * Стили для компонента динамических полей
+ */
+
+.yfgp-dynamic-field {
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 15px;
+}
+
+.yfgp-field-row {
+  margin-bottom: 12px;
+}
+
+.yfgp-field-row:last-child {
+  margin-bottom: 0;
+}
+
+.yfgp-field-label {
+  display: block;
+}
+
+.yfgp-field-label .label-text {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 600;
+  color: #333;
+}
+
+.yfgp-dynamic-field select,
+.yfgp-dynamic-field input[type="text"] {
+  width: 100%;
+  max-width: 100%;
+}
+
+.yfgp-preview-box {
+  background: #fff;
+  border: 1px solid #c3c4c7;
+  border-radius: 3px;
+  padding: 10px;
+}
+
+.yfgp-preview-code {
+  margin: 8px 0 0 0;
+  padding: 10px;
+  background: #23282d;
+  color: #f0f0f1;
+  border-radius: 3px;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+/* Анимация появления */
+.yfgp-direct-field,
+.yfgp-relation-1-field,
+.yfgp-relation-2-field,
+.yfgp-custom-field {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Цепочка связей */
+.yfgp-relation-1-field .yfgp-field-row,
+.yfgp-relation-2-field .yfgp-field-row {
+  position: relative;
+  padding-left: 25px;
+}
+
+.yfgp-relation-1-field .yfgp-field-row::before,
+.yfgp-relation-2-field .yfgp-field-row::before {
+  content: "→";
+  position: absolute;
+  left: 5px;
+  top: 30px;
+  color: #2271b1;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.yfgp-relation-1-field .yfgp-field-row:first-child::before,
+.yfgp-relation-2-field .yfgp-field-row:first-child::before {
+  content: "1";
+  background: #2271b1;
+  color: #fff;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  font-size: 12px;
+  top: 28px;
+}
+
+.yfgp-relation-2-field .yfgp-field-row:nth-child(2)::before {
+  content: "→";
+}
+
+.yfgp-relation-2-field .yfgp-field-row:nth-child(3)::before {
+  content: "2";
+  background: #2271b1;
+  color: #fff;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  font-size: 12px;
+  top: 28px;
+}
+
+/* Стили для новой страницы маппинга */
+.yfgp-mapping-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+.yfgp-mapping-card {
+  background: #fff;
+  border: 1px solid #c3c4c7;
+  border-radius: 4px;
+  padding: 20px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.yfgp-mapping-card h3 {
+  margin: 0 0 15px 0;
+  padding: 0 0 10px 0;
+  border-bottom: 2px solid #2271b1;
+  color: #2271b1;
+}
+
+.yfgp-mapping-card.required h3::after {
+  content: "*";
+  color: #d63638;
+  margin-left: 5px;
+}
+
+.yfgp-mapping-card p.description {
+  margin: 10px 0;
+  color: #666;
+  font-style: italic;
+}
+
+.yfgp-field-type-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  background: #f0f0f1;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #666;
+  margin-left: 5px;
+}
+
+.yfgp-field-type-badge.required {
+  background: #fff0f1;
+  color: #d63638;
+}
+
+.yfgp-mapping-actions {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  border-top: 1px solid #c3c4c7;
+  padding: 15px 20px;
+  margin: 20px -20px -20px -20px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.yfgp-mapping-status {
+  margin-left: auto;
+  padding: 5px 12px;
+  background: #f0f0f1;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.yfgp-mapping-status.saved {
+  background: #edfaed;
+  color: #1e6e1e;
+}
+
+.yfgp-mapping-status.error {
+  background: #fff0f1;
+  color: #d63638;
+}
+
+/* Responsive */
+@media (min-width: 1200px) {
+  .yfgp-mapping-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+

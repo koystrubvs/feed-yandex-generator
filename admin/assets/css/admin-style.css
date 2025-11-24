@@ -1,0 +1,227 @@
+/**
+ * Стили админ-панели Yandex Feed Generator Pro
+ */
+
+.yfgp-card {
+    background: #fff;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+    border-radius: 4px;
+}
+
+.yfgp-card h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.yfgp-notice {
+    background: #e7f5fe;
+    border-left: 4px solid #2271b1;
+    padding: 15px;
+    margin: 20px 0;
+    border-radius: 4px;
+}
+
+.yfgp-notice ul {
+    margin: 10px 0 0 20px;
+}
+
+.yfgp-mapping-container {
+    display: flex;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.yfgp-mapping-left,
+.yfgp-mapping-right {
+    flex: 1;
+}
+
+.yfgp-field-group {
+    margin-bottom: 20px;
+}
+
+.yfgp-field-group h3 {
+    margin: 0 0 10px 0;
+    padding: 10px;
+    background: #f0f0f1;
+    border-radius: 4px;
+}
+
+.yfgp-field-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.yfgp-field-item {
+    padding: 10px;
+    margin: 5px 0;
+    background: #f0f0f1;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    cursor: move;
+    transition: all 0.2s;
+}
+
+.yfgp-field-item:hover {
+    background: #e0e0e1;
+    transform: translateX(5px);
+}
+
+.yfgp-field-item .dashicons {
+    color: #2271b1;
+    vertical-align: middle;
+}
+
+.yfgp-field-item small {
+    color: #646970;
+    font-size: 11px;
+}
+
+.yfgp-xml-preview {
+    width: 100%;
+    height: 400px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    background: #f6f7f7;
+    border: 1px solid #c3c4c7;
+    padding: 15px;
+    border-radius: 4px;
+    resize: vertical;
+}
+
+.yfgp-tabs {
+    border-bottom: 1px solid #c3c4c7;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+.yfgp-tab {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.yfgp-tab:hover {
+    background: #f0f0f1;
+}
+
+.yfgp-tab.active {
+    border-bottom-color: #2271b1;
+    color: #2271b1;
+    font-weight: 600;
+}
+
+.yfgp-tab-content {
+    display: none;
+}
+
+.yfgp-tab-content.active {
+    display: block;
+}
+
+.yfgp-status-success {
+    color: #00a32a;
+    font-weight: 600;
+}
+
+.yfgp-status-error {
+    color: #d63638;
+    font-weight: 600;
+}
+
+.button-hero {
+    padding: 12px 24px !important;
+    height: auto !important;
+    font-size: 16px !important;
+}
+
+/* Modal Window - v4.0.1: Fix z-index + v4.1.0-beta31: Fix admin menu overlap */
+.yfgp-modal {
+    position: fixed;
+    z-index: 100000; /* Выше admin bar */
+    left: 160px; /* Отступ справа от WordPress admin menu */
+    top: 32px; /* Отступ под WordPress admin bar */
+    width: calc(100% - 160px); /* Ширина минус admin menu */
+    height: calc(100% - 32px); /* Высота минус admin bar */
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.yfgp-modal-content {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 800px;
+    width: 90%;
+    max-height: calc(100vh - 100px); /* Отступ сверху и снизу */
+    position: relative;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.yfgp-modal-content h2 {
+    margin-top: 0;
+    padding-right: 30px; /* Место для кнопки закрытия */
+}
+
+.yfgp-modal-close {
+    position: absolute;
+    right: 15px;
+    top: 15px;
+    font-size: 28px;
+    font-weight: bold;
+    color: #aaa;
+    cursor: pointer;
+    line-height: 20px;
+    transition: color 0.2s;
+}
+
+.yfgp-modal-close:hover,
+.yfgp-modal-close:focus {
+    color: #000;
+}
+
+/* Обновлённые стили для XML preview в модальном окне */
+.yfgp-modal .yfgp-xml-preview {
+    width: 100%;
+    height: 400px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    background: #f6f7f7;
+    border: 1px solid #c3c4c7;
+    padding: 15px;
+    border-radius: 4px;
+    resize: vertical;
+    margin-top: 10px;
+    overflow-y: auto; /* Скролл для длинного контента */
+}
+
+/* Адаптивность */
+@media (max-width: 782px) {
+    .yfgp-mapping-container {
+        flex-direction: column;
+    }
+    
+    .yfgp-modal-content {
+        width: 95%;
+        max-height: 90vh;
+        padding: 15px;
+    }
+    
+    .yfgp-modal .yfgp-xml-preview {
+        height: 300px;
+    }
+}
+

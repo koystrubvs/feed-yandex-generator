@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<phpunit
+    bootstrap="tests/Unit/bootstrap.php"
+    colors="true"
+    processIsolation="false"
+    stopOnFailure="false"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>./tests/Unit</directory>
+            <file>./tests/Unit/CacheManagerTest.php</file>
+            <file>./tests/Unit/ServiceContainerTest.php</file>
+            <file>./tests/Unit/MappingValidatorTest.php</file>
+            <file>./tests/Unit/EntityValidatorTest.php</file>
+        </testsuite>
+        <testsuite name="Integration">
+            <directory>./tests/Integration</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory suffix=".php">./includes</directory>
+        </include>
+    </source>
+</phpunit>

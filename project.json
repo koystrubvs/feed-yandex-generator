@@ -1,0 +1,35 @@
+{
+  "name": "plugin",
+  "root": "wp-content/plugins/yandex-feed-generator-pro-v2",
+  "sourceRoot": "wp-content/plugins/yandex-feed-generator-pro-v2",
+  "projectType": "application",
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "echo 'PHP linting not configured yet'"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "echo 'PHP tests not configured yet'"
+      }
+    },
+    "backup": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash backup-v3-1-0.bat",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "docker exec wordpress wp plugin list"
+      }
+    }
+  },
+  "tags": ["type:plugin", "scope:wordpress"],
+  "implicitDependencies": []
+}
