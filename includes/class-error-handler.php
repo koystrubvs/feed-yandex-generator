@@ -109,11 +109,21 @@ class YFGP_Error_Handler {
             $exception->getLine()
         );
         
-        $this->log_error('exception', $message, array(
+        $context = array(
             'file' => $exception->getFile(),
             'line' => $exception->getLine(),
             'trace' => $exception->getTraceAsString()
-        ));
+        );
+        
+        $this->log_error('exception', $message, $context);
+        
+        // v4.18.21: Отправка исключения в Sentry
+        if (class_exists('YFGP_Sentry_Integration')) {
+            $sentry = YFGP_Sentry_Integration::get_instance();
+            if ($sentry->is_initialized()) {
+                $sentry->capture_exception($exception, $context);
+            }
+        }
         
         // v4.18.8: Регистрируем критичную ошибку для отображения в admin_notices
         $user_message = sprintf(
@@ -154,6 +164,17 @@ class YFGP_Error_Handler {
         }
         
         error_log($log_message);
+        
+        // v4.18.21: Отправка критичных ошибок в Sentry
+        if (in_array($type, array('error', 'exception', 'critical_error', 'ajax_error', 'cron_error'), true)) {
+            if (class_exists('YFGP_Sentry_Integration')) {
+                $sentry = YFGP_Sentry_Integration::get_instance();
+                if ($sentry->is_initialized()) {
+                    $sentry_level = ($type === 'exception' || $type === 'critical_error') ? 'error' : $type;
+                    $sentry->capture_message($message, $sentry_level, $context);
+                }
+            }
+        }
         
         // Сохраняем в опцию для истории (последние 100 ошибок)
         $this->save_error_to_history($log_entry);

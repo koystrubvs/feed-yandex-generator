@@ -202,6 +202,9 @@ class YFGP_Admin_Page {
      * Главная страница (настройки)
      */
     public function render_main_page(): void {
+        // Проверка прав доступа уже выполнена WordPress через 'manage_options' в add_menu_page()
+        // Дополнительная проверка не требуется
+        
         // Сохранение настроек
         if (isset($_POST['yfgp_save_settings']) && check_admin_referer('yfgp_settings_nonce')) {
             $settings = array(
@@ -257,6 +260,10 @@ class YFGP_Admin_Page {
                 // v4.19.0: Обработка fallback_speciality (специализация по умолчанию)
                 'fallback_speciality' => isset($_POST['fallback_speciality_custom_toggle']) ? '' : sanitize_text_field(wp_unslash($_POST['fallback_speciality'] ?? '')),
                 'fallback_speciality_custom' => isset($_POST['fallback_speciality_custom_toggle']) ? sanitize_text_field(wp_unslash($_POST['fallback_speciality_custom'] ?? '')) : '',
+                // v4.18.21: Sentry Integration настройки
+                'sentry_enabled' => isset($_POST['sentry_enabled']),
+                'sentry_dsn' => sanitize_text_field($_POST['sentry_dsn'] ?? ''),
+                'sentry_traces_sample_rate' => isset($_POST['sentry_traces_sample_rate']) ? (float) $_POST['sentry_traces_sample_rate'] : 0.1,
             );
             
             // Миграция legacy CPT ключей и нормализация настроек

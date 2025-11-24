@@ -21,8 +21,18 @@ $exclude = array('revision', 'nav_menu_item', 'custom_css', 'customize_changeset
 $post_types = array_filter($post_types, function($pt) use ($exclude) {
     return !in_array($pt->name, $exclude);
 });
-$cron_manager = new YFGP_Cron_Manager();
-$intervals = $cron_manager->get_intervals();
+
+// v4.18.21: Безопасное создание Cron Manager с обработкой ошибок
+try {
+    $cron_manager = new YFGP_Cron_Manager();
+    $intervals = $cron_manager->get_intervals();
+} catch (\Throwable $e) {
+    // Fallback на пустой массив интервалов при ошибке
+    $intervals = array('disabled' => 'Отключено');
+    if (function_exists('error_log') && defined('WP_DEBUG') && WP_DEBUG) {
+        error_log('YFGP: Failed to create Cron Manager in settings.php: ' . $e->getMessage());
+    }
+}
 ?>
 
 <div class="wrap">
@@ -803,6 +813,58 @@ $intervals = $cron_manager->get_intervals();
                             </div>
                         </div>
                     </div>
+                </td>
+            </tr>
+            
+            <tr>
+                <th colspan="2"><h2>🔍 Sentry - Мониторинг ошибок</h2></th>
+            </tr>
+            
+            <tr>
+                <th scope="row"><label for="sentry_enabled">Включить Sentry</label></th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="sentry_enabled" id="sentry_enabled" value="1" <?php checked($settings['sentry_enabled'] ?? false); ?>>
+                        Отправлять ошибки в Sentry для мониторинга
+                    </label>
+                    <p class="description">
+                        Включите для отправки ошибок и исключений в Sentry. Требуется установленный Sentry SDK и настроенный DSN.
+                    </p>
+                </td>
+            </tr>
+            
+            <tr>
+                <th scope="row"><label for="sentry_dsn">Sentry DSN</label></th>
+                <td>
+                    <input type="text" 
+                           id="sentry_dsn" 
+                           name="sentry_dsn" 
+                           value="<?php echo esc_attr($settings['sentry_dsn'] ?? ''); ?>" 
+                           class="regular-text code"
+                           placeholder="https://examplePublicKey@o0.ingest.sentry.io/0">
+                    <p class="description">
+                        DSN (Data Source Name) для вашего проекта в Sentry.<br>
+                        Получить можно в настройках проекта: <strong>Settings → Client Keys (DSN)</strong><br>
+                        Формат: <code>https://[PUBLIC_KEY]@[HOST]/[PROJECT_ID]</code>
+                    </p>
+                </td>
+            </tr>
+            
+            <tr>
+                <th scope="row"><label for="sentry_traces_sample_rate">Sample Rate для трейсинга</label></th>
+                <td>
+                    <input type="number" 
+                           id="sentry_traces_sample_rate" 
+                           name="sentry_traces_sample_rate" 
+                           value="<?php echo esc_attr($settings['sentry_traces_sample_rate'] ?? '0.1'); ?>" 
+                           class="small-text"
+                           min="0"
+                           max="1"
+                           step="0.1">
+                    <p class="description">
+                        Доля запросов для трейсинга производительности (0.0 - 1.0).<br>
+                        По умолчанию: <strong>0.1</strong> (10% запросов). Для production рекомендуется 0.1-0.2.
+                    </p>
                 </td>
             </tr>
         </table>

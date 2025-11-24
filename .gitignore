@@ -8,6 +8,9 @@ node_modules/
 # Development artifacts (moved from plugin root)
 dev-artifacts/
 
+# Test/debug scripts (temporary development tools)
+scripts/
+
 # Vendor dependencies (installed via composer)
 vendor/
 

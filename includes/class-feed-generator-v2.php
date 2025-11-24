@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Yandex Feed Generator Pro - Feed Generator for Yandex Feed Format v2.0
  *
@@ -2513,24 +2513,18 @@ class YFGP_Feed_Generator_V2 {
                 return false;
             }
 
+            // v4.18.24: FIX - проверяем ТОЛЬКО текущую специализацию, а не все специализации врача
+            // Если у врача есть несколько специализаций (например, nevrolog и terapevt),
+            // и terapevt исключена, то офферы должны создаваться для nevrolog
             $speciality_slug = is_array($speciality) ? ($speciality['slug'] ?? '') : (string) $speciality;
             if ($speciality_slug !== '' && in_array($speciality_slug, $excluded_terms, true)) {
-                error_log('YFGP v4.18.23: Specialty excluded (direct match): ' . $speciality_slug);
+                error_log('YFGP v4.18.24: Specialty excluded (direct match): ' . $speciality_slug);
                 return true;
             }
-
-            $doctor_terms = $doctor_data['speciality_terms'] ?? array();
-            if (empty($doctor_terms) && !empty($doctor_data['post_id'])) {
-                $doctor_terms = $this->get_doctor_speciality_terms((int) $doctor_data['post_id']);
-            }
-
-            foreach ($doctor_terms as $term) {
-                $term_slug = is_array($term) ? ($term['slug'] ?? '') : (string) $term;
-                if ($term_slug !== '' && in_array($term_slug, $excluded_terms, true)) {
-                    error_log('YFGP v4.18.23: Specialty excluded by taxonomy: ' . $term_slug . ' for speciality: ' . $speciality_slug);
-                    return true;
-                }
-            }
+            
+            // v4.18.24: Если текущая специализация не в списке исключенных - возвращаем false
+            // Удалена проверка всех специализаций врача - это была ошибка!
+            return false;
         } elseif ($source === 'field') {
             $field = $this->settings['exclusions_field'] ?? '';
             if ($field === '') {
@@ -2836,11 +2830,9 @@ class YFGP_Feed_Generator_V2 {
             'auto_created' => true  // Flag for logging
         );
 
-        $default_auto_price = $this->settings['default_auto_service_price'] ?? ($this->settings['default_service_price'] ?? null);
-        if ($default_auto_price !== null && $default_auto_price !== '' && is_numeric($default_auto_price)) {
-            $auto_service['price'] = $default_auto_price;
-            $auto_service['currency'] = $this->settings['default_currency'] ?? 'RUR';
-        }
+        // v4.18.24: Автогенерированные услуги НЕ должны иметь цену
+        // Цена должна браться только из БД (связанные посты prices)
+        // Удалено: default_auto_service_price больше не используется
         
         // CRITICAL: Add to GLOBAL services array!
         // This ensures service appears in <services> block in YML
