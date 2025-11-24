@@ -2506,62 +2506,82 @@ class YFGP_Feed_Generator_V2 {
         $source = $mapping['specialties_no_primary_source'] ?? 'taxonomy';
         
         if ($source === 'taxonomy') {
-            // Check by taxonomy
             $excluded_terms = $this->settings['exclusions_terms'] ?? array();
-            
-            // Get doctor specialty terms
+            $excluded_terms = array_filter(array_map('strval', (array) $excluded_terms));
+
+            if (empty($excluded_terms)) {
+                return false;
+            }
+
+            $speciality_slug = is_array($speciality) ? ($speciality['slug'] ?? '') : (string) $speciality;
+            if ($speciality_slug !== '' && in_array($speciality_slug, $excluded_terms, true)) {
+                error_log('YFGP v4.18.23: Specialty excluded (direct match): ' . $speciality_slug);
+                return true;
+            }
+
             $doctor_terms = $doctor_data['speciality_terms'] ?? array();
-            
+            if (empty($doctor_terms) && !empty($doctor_data['post_id'])) {
+                $doctor_terms = $this->get_doctor_speciality_terms((int) $doctor_data['post_id']);
+            }
+
             foreach ($doctor_terms as $term) {
-                // Handle different formats: array or string
-                $term_slug = is_array($term) ? ($term['slug'] ?? $term) : $term;
-                
-                if (in_array($term_slug, $excluded_terms)) {
-                    error_log('YFGP v4.18.1: Specialty excluded by taxonomy: ' . $term_slug . ' for speciality: ' . $speciality);
+                $term_slug = is_array($term) ? ($term['slug'] ?? '') : (string) $term;
+                if ($term_slug !== '' && in_array($term_slug, $excluded_terms, true)) {
+                    error_log('YFGP v4.18.23: Specialty excluded by taxonomy: ' . $term_slug . ' for speciality: ' . $speciality_slug);
                     return true;
                 }
             }
         } elseif ($source === 'field') {
-            // Check by condition on doctor field
             $field = $this->settings['exclusions_field'] ?? '';
-            $operator = $this->settings['exclusions_operator'] ?? 'equals';
-            $value = $this->settings['exclusions_value'] ?? '';
-            
-            if (empty($field)) {
+            if ($field === '') {
                 return false;
             }
-            
-            $field_value = $doctor_data[$field] ?? null;
-            
+
+            $operator = $this->settings['exclusions_operator'] ?? 'equals';
+            $value = $this->settings['exclusions_value'] ?? '';
+            $field_raw_value = $doctor_data[$field] ?? null;
+            $normalized_field_values = $this->normalize_condition_values($field_raw_value);
+            $normalized_target_values = $this->normalize_condition_values(
+                is_string($value) && strpos($value, ',') !== false
+                    ? array_map('trim', explode(',', $value))
+                    : $value
+            );
+
+            $result = false;
             switch ($operator) {
                 case 'equals':
-                    $result = $field_value == $value;
+                    $target = $normalized_target_values[0] ?? '';
+                    $result = $target !== '' && $this->has_condition_match($normalized_field_values, array($target));
                     break;
                 case 'not_equals':
-                    $result = $field_value != $value;
+                    $target = $normalized_target_values[0] ?? '';
+                    $result = $target !== '' && !$this->has_condition_match($normalized_field_values, array($target));
                     break;
                 case 'in_array':
-                    $values = array_map('trim', explode(',', $value));
-                    $result = in_array($field_value, $values);
+                    $result = $this->has_condition_match($normalized_field_values, $normalized_target_values);
                     break;
                 case 'not_in_array':
-                    $values = array_map('trim', explode(',', $value));
-                    $result = !in_array($field_value, $values);
+                    $result = !$this->has_condition_match($normalized_field_values, $normalized_target_values);
                     break;
                 case 'empty':
-                    $result = empty($field_value);
+                    $result = $this->is_condition_value_empty($field_raw_value);
                     break;
                 case 'not_empty':
-                    $result = !empty($field_value);
+                    $result = !$this->is_condition_value_empty($field_raw_value);
                     break;
                 default:
                     $result = false;
             }
-            
+
             if ($result) {
-                error_log('YFGP v4.18.1: Specialty excluded by field condition: ' . $field . ' ' . $operator . ' ' . $value);
+                error_log(sprintf(
+                    'YFGP v4.18.23: Specialty excluded by field condition (%s %s %s)',
+                    $field,
+                    $operator,
+                    is_scalar($value) ? $value : json_encode($value)
+                ));
             }
-            
+
             return $result;
         }
         
@@ -2592,15 +2612,7 @@ class YFGP_Feed_Generator_V2 {
     public function determine_base_service(array $services, string $speciality, array $mapping, array $doctor_data, array &$global_services): ?array {
         // Priority 0: Check specialty exclusions (UZI/rentgen)
         if ($this->is_specialty_excluded($speciality, $doctor_data, $mapping)) {
-            // For excluded specialties: first service WITHOUT auto-creation of "primary appointment"
-            if (!empty($services)) {
-                $preferred_service = $this->pick_discount_prioritized_service($services);
-                if ($preferred_service !== null) {
-                    return $preferred_service;
-                }
-                return $services[0];
-            }
-            error_log('YFGP v3.5.3: Specialty excluded, no services available - no offer will be created');
+            error_log('YFGP v4.18.23: Specialty ' . $speciality . ' excluded, skipping offer creation');
             return null;
         }
         
@@ -2819,10 +2831,16 @@ class YFGP_Feed_Generator_V2 {
             'id' => $service_id,  // v4.4.1: service_auto_24823 (Yandex-compliant)
             'name' => $service_name,
             'internal_id' => $service_id,
-            'price' => null, // Price is NOT required for base service (Yandex allows)
+            'description' => $service_name,
             'is_base_service' => true,
             'auto_created' => true  // Flag for logging
         );
+
+        $default_auto_price = $this->settings['default_auto_service_price'] ?? ($this->settings['default_service_price'] ?? null);
+        if ($default_auto_price !== null && $default_auto_price !== '' && is_numeric($default_auto_price)) {
+            $auto_service['price'] = $default_auto_price;
+            $auto_service['currency'] = $this->settings['default_currency'] ?? 'RUR';
+        }
         
         // CRITICAL: Add to GLOBAL services array!
         // This ensures service appears in <services> block in YML
@@ -2862,6 +2880,114 @@ class YFGP_Feed_Generator_V2 {
         $text = $this->settings['specialties_no_primary'] ?? '';
         $specialties = array_map('trim', explode(',', $text));
         return array_map('strtolower', $specialties);
+    }
+
+    /**
+     * Получить список slug-ов специализаций для врача
+     *
+     * @param int $post_id
+     * @return array<int, string>
+     */
+    private function get_doctor_speciality_terms(int $post_id): array {
+        if ($post_id <= 0) {
+            return array();
+        }
+
+        $taxonomy = $this->settings['exclusions_taxonomy'] ?? '';
+        if (empty($taxonomy)) {
+            $taxonomy = $this->settings['specialties_taxonomy'] ?? '';
+        }
+
+        if (empty($taxonomy) || !taxonomy_exists($taxonomy)) {
+            return array();
+        }
+
+        $terms = wp_get_post_terms($post_id, $taxonomy, array('fields' => 'id=>slug'));
+        if (is_wp_error($terms) || empty($terms)) {
+            return array();
+        }
+
+        return array_values(array_filter(array_map('strval', $terms)));
+    }
+
+    /**
+     * Normalize doctor field values for condition comparison (case-insensitive).
+     *
+     * @param mixed $value
+     * @return array<int, string>
+     */
+    private function normalize_condition_values($value): array {
+        $normalized = array();
+
+        $walker = function ($item) use (&$walker, &$normalized): void {
+            if ($item === null) {
+                return;
+            }
+
+            if (is_array($item)) {
+                foreach ($item as $sub) {
+                    $walker($sub);
+                }
+                return;
+            }
+
+            if (is_bool($item)) {
+                $item = $item ? 'true' : 'false';
+            }
+
+            $string = trim((string) $item);
+            if ($string === '') {
+                return;
+            }
+
+            $normalized[] = mb_strtolower($string, 'UTF-8');
+        };
+
+        $walker($value);
+
+        return array_values(array_unique($normalized));
+    }
+
+    /**
+     * Check if at least one value matches any target (both already normalized).
+     *
+     * @param array<int, string> $field_values
+     * @param array<int, string> $target_values
+     * @return bool
+     */
+    private function has_condition_match(array $field_values, array $target_values): bool {
+        if (empty($field_values) || empty($target_values)) {
+            return false;
+        }
+
+        return count(array_intersect($field_values, $target_values)) > 0;
+    }
+
+    /**
+     * Determine if value should be treated as empty for condition checks.
+     *
+     * @param mixed $value
+     * @return bool
+     */
+    private function is_condition_value_empty($value): bool {
+        if ($value === null) {
+            return true;
+        }
+
+        if (is_array($value)) {
+            foreach ($value as $sub) {
+                if (!$this->is_condition_value_empty($sub)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        if (is_bool($value)) {
+            return !$value;
+        }
+
+        return trim((string) $value) === '';
     }
 
     /**
@@ -3126,7 +3252,7 @@ class YFGP_Feed_Generator_V2 {
         $base_price = $offer['base_price'] ?? $offer['price'] ?? null;
         $currency = $offer['currency'] ?? $this->settings['default_currency'] ?? 'RUR';
         
-        if (!empty($base_price)) {
+        if ($base_price !== null && $base_price !== '') {
             $xml .= '      <price>' . "\n";
             $xml .= '        <base_price>' . $this->escape_xml($base_price) . '</base_price>' . "\n";
             $xml .= '        <currency>' . $this->escape_xml($currency) . '</currency>' . "\n";
@@ -3154,7 +3280,7 @@ class YFGP_Feed_Generator_V2 {
             }
             
             $xml .= '      </price>' . "\n";
-        } elseif (!empty($offer['price']) || !empty($offer['base_price'])) {
+        } elseif (($offer['price'] ?? null) !== null || ($offer['base_price'] ?? null) !== null) {
             // v4.18.1: Валидация - если price/base_price указан, но пустой, предупреждение в лог
             error_log('YFGP v4.18.1: Warning - price/base_price is empty for offer ' . ($offer['id'] ?? 'unknown'));
         }

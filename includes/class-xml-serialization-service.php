@@ -164,6 +164,8 @@ class YFGP_Xml_Serialization_Service {
             'internal_id' => $post->ID,
             'description' => $this->sanitize_feed_text($data['description'] ?? get_the_excerpt($post->ID)),
         );
+        $doctor['post_id'] = $post->ID;
+        $doctor['speciality_terms'] = $this->get_speciality_terms_for_post($post->ID);
 
         // Добавляем ФИО компоненты если есть
         if (!empty($params['Фамилия'])) $doctor['surname'] = $params['Фамилия'];
@@ -1963,6 +1965,42 @@ class YFGP_Xml_Serialization_Service {
         }
 
         return 'reviews';
+    }
+
+    /**
+     * Получить термины специализации для указанного врача
+     *
+     * @param int $post_id
+     * @return array<int, array<string, string>>
+     */
+    private function get_speciality_terms_for_post(int $post_id): array {
+        if ($post_id <= 0) {
+            return array();
+        }
+
+        $taxonomy = $this->settings['exclusions_taxonomy'] ?? '';
+        if (empty($taxonomy)) {
+            $taxonomy = $this->settings['specialties_taxonomy'] ?? '';
+        }
+
+        if (empty($taxonomy) || !taxonomy_exists($taxonomy)) {
+            return array();
+        }
+
+        $terms = wp_get_post_terms($post_id, $taxonomy, array('fields' => 'all'));
+        if (is_wp_error($terms) || empty($terms)) {
+            return array();
+        }
+
+        $result = array();
+        foreach ($terms as $term) {
+            $result[] = array(
+                'slug' => $term->slug,
+                'name' => $term->name,
+            );
+        }
+
+        return $result;
     }
 }
 
