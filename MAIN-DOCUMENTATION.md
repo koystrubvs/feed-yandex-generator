@@ -1,8 +1,8 @@
 ﻿# Yandex Feed Generator Pro - Main Documentation
 
-> **Plugin version:** 4.18.22  
+> **Plugin version:** 4.18.21  
 > **Last updated:** 2025-11-24  
-> **Latest:** Fix encoding issues (cracked characters) - все кракозябры исправлены  
+> **Latest:** Sentry SDK интеграция для production мониторинга, Docker конфигурация обновлена (wp на порту 8000).  
 > **Purpose:** generate Yandex.Health (v2.0) YML feeds for WordPress sites  
 > **v4.18.16:** JetEngine API унифицирован (`get_meta_fields_for_object`), добавлено кэширование полей, debug логи обёрнуты в `WP_DEBUG`  
 > **Status:** Production Ready (unified mapping, ACF & JetEngine support, no hardcoded field names)
@@ -18,7 +18,9 @@
 - **Vibe Check MCP:** обязательный наставник (`tools/vibe-check-mcp-server`). Конфиг в `C:\Users\Sergey\.cursor\mcp.json`: `"vibe-check": { "type": "stdio", "command": "node", "args": ["D:/feed/tools/vibe-check-mcp-server/build/index.js"], "env": {"MCP_TRANSPORT": "stdio"} }`. Вызовы `vibe_check` (10–20% шагов) и `vibe_learn` нужны после планирования и перед каждым крупным действием.
 - **Ref MCP (https://ref.tools/):** используется для поиска внешней документации. Конфиг: `"Ref": { "type": "http", "url": "https://api.ref.tools/mcp?apiKey=<YOUR_API_KEY>" }`. Перед изменениями библиотек/API выполняем `ref_search_documentation` → `ref_read_url`; Context7 применяем только если Ref не дал ответ.
 - **WordPress MCP:** установлен плагин `wordpress-mcp` + прокси `@automattic/mcp-wordpress-remote`. Конфиг MCP: `"wordpress-mcp": { "command": "npx", "args": ["-y", "@automattic/mcp-wordpress-remote@latest"], "env": { "WP_API_URL": "http://localhost:8000", "JWT_TOKEN": "<актуальный токен>" } }`. Используется для обращения к REST/MCP инструментам WordPress прямо из Cursor (CRUD по постам, пользователям, WooCommerce и т.д.).
-- **GitHub (public release):** https://github.com/lutyi2856/feed-yandex-generator (`main`). Локальный `.git` живёт в `wp-content/plugins/yandex-feed-generator-pro-v2/`; синхронизируем production-структуру (исключаем `dev-artifacts/`, `vendor/`, `.phpunit.cache/`, backup/temp файлы по `.gitignore`). Источник правды — контейнер `wordpress-local`, собранный код пушим только после `Sync-Plugin-From-Container`.
+- **Sentry MCP:** удалённый сервер `https://mcp.sentry.dev/mcp` (OAuth конфигурация). Позволяет просматривать ошибки, релизы, проекты и вызывать Seer для автоматического анализа. Используем в QA/REFLECT режимах, чтобы убедиться, что новые баги не появляются после правок.
+- **Sentry SDK:** интегрирован `sentry/sentry` (v4.0+) для production мониторинга. Класс `YFGP_Sentry_Integration` (`includes/class-sentry-integration.php`) инициализируется на хуке `init`, интегрирован с `YFGP_Error_Handler`. Настройки в админке: `sentry_enabled`, `sentry_dsn`, `sentry_traces_sample_rate`. Документация: `SENTRY-INSTALLATION.md`.
+- **GitHub (public release):** https://github.com/lutyi2856/feed-yandex-generator (`main`). Локальный `.git` живёт в `wp-content/plugins/yandex-feed-generator-pro-v2/`; синхронизируем production-структуру (исключаем `dev-artifacts/`, `vendor/`, `.phpunit.cache/`, backup/temp файлы по `.gitignore`). Источник правды — контейнер `wp` (порт 8000), собранный код пушим только после `Sync-Plugin-From-Container`.
 
 ---
 

@@ -8,7 +8,7 @@
 
  * Description: Универсальный генератор YML фидов для Яндекс.Вебмастера с поддержкой ACF и JetEngine
 
- * Version: 4.18.20
+ * Version: 4.18.21
 
  * Author: Vityaz Development Team
 
@@ -36,7 +36,7 @@ if (!defined('ABSPATH')) {
 
 // Константы плагина
 
-define('YFGP_VERSION', '4.18.20'); // v4.18.20: Entity Serialization Refactoring - перенос методов build_entity в XmlSerializationService
+define('YFGP_VERSION', '4.18.21'); // v4.18.21: Sentry Integration - интеграция с Sentry SDK для мониторинга ошибок
 
 if (!defined('YFGP_PLUGIN_DIR')) {
 
@@ -178,6 +178,21 @@ class Yandex_Feed_Generator_Pro {
 
         require_once YFGP_PLUGIN_DIR . 'includes/class-error-handler.php'; // v4.18.0: Error Handler
 
+        // v4.18.21: Sentry Integration для мониторинга ошибок
+        // Загружаем Composer autoload для Sentry SDK (если установлен)
+        $vendor_autoload = YFGP_PLUGIN_DIR . 'vendor/autoload.php';
+        if (file_exists($vendor_autoload)) {
+            try {
+                require_once $vendor_autoload;
+            } catch (\Throwable $e) {
+                // Игнорируем ошибки загрузки autoload, чтобы не ломать плагин
+                if (function_exists('error_log') && defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('YFGP: Failed to load vendor/autoload.php: ' . $e->getMessage());
+                }
+            }
+        }
+        require_once YFGP_PLUGIN_DIR . 'includes/class-sentry-integration.php'; // v4.18.21: Sentry Integration
+
         require_once YFGP_PLUGIN_DIR . 'includes/class-entity-manager.php'; // v4.18.11: Entity Manager для расширяемости
 
         // v4.18.17: Service Container и service-factories для DI (рефакторинг)
@@ -199,6 +214,10 @@ class Yandex_Feed_Generator_Pro {
      */
 
     private function init_hooks() {
+
+        // v4.18.21: Инициализация Sentry после полной загрузки WordPress
+        // Используем 'init' вместо 'plugins_loaded' для большей безопасности
+        add_action('init', array($this, 'init_sentry'), 20);
 
         // v4.18.0: Выполнение миграции CPT настроек при инициализации
 
@@ -367,6 +386,27 @@ class Yandex_Feed_Generator_Pro {
      * @return void
 
      */
+
+    /**
+     * Инициализация Sentry Integration
+     * 
+     * @since 4.18.21
+     * @return void
+     */
+    public function init_sentry(): void {
+        // v4.18.21: Безопасная инициализация Sentry с обработкой ошибок
+        try {
+            if (class_exists('YFGP_Sentry_Integration')) {
+                $sentry = YFGP_Sentry_Integration::get_instance();
+                $sentry->init();
+            }
+        } catch (\Throwable $e) {
+            // Игнорируем ошибки инициализации Sentry, чтобы не ломать плагин
+            if (function_exists('error_log') && defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('YFGP: Failed to initialize Sentry: ' . $e->getMessage());
+            }
+        }
+    }
 
     public function run_migration(): void {
 
