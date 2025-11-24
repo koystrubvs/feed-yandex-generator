@@ -242,18 +242,30 @@ class YFGP_Offer_Builder {
                 $offer_id = 'offer_' . $post->ID . '_' . $clinic_id . '_' . $specialization_slug;
 
                 // Собираем данные оффера
+                $base_price_value = $base_service['price'] ?? null;
+                $currency_value = $base_price_value !== null && $base_price_value !== ''
+                    ? ($base_service['currency'] ?? ($this->settings['default_currency'] ?? 'RUR'))
+                    : null;
+                $discount_value = $base_service['price_discount'] ?? null;
+                $discount_name_value = (!empty($discount_value) && !empty($base_service['discount_name']))
+                    ? $base_service['discount_name']
+                    : null;
+                $free_appointment_value = (!empty($discount_value) && !empty($base_service['free_appointment_condition']))
+                    ? $base_service['free_appointment_condition']
+                    : null;
+
                 $offer_data = array(
                     'id' => $offer_id,
                     'doctor_id' => $doctor_id,
                     'clinic_id' => $clinic_id, // v4.4.0: FIXED - $clinic_id already has 'clinic_' prefix from mapper!
                     'service_id' => $service_id,
                     'speciality' => mb_strtolower($this->normalize_speciality_value($specialization_text, $fallback_spec_text)), // v4.10.8: LOWERCASE согласно Яндекс docs! v4.18.1: FIX - защита от массивов
-                    'price' => $base_service['price'] ?? null, // Цена НЕ обязательна!
-                    'base_price' => $base_service['price'] ?? null,
-                    'currency' => $this->settings['default_currency'] ?? 'RUR', // v4.18.2: УНИВЕРСАЛЬНО - из настроек
-                    'discount' => $base_service['price_discount'] ?? null, // v4.5.0: Discount from related prices CPT
-                    'discount_name' => $base_service['discount_name'] ?? null,
-                    'free_appointment_condition' => $base_service['free_appointment_condition'] ?? null,
+                    'price' => $base_price_value, // Цена НЕ обязательна!
+                    'base_price' => $base_price_value,
+                    'currency' => $currency_value, // v4.18.2: указываем только при наличии цены
+                    'discount' => $discount_value, // v4.5.0: Discount from related prices CPT
+                    'discount_name' => $discount_name_value,
+                    'free_appointment_condition' => $free_appointment_value,
                     'is_base_service' => true,
                     'appointment_url' => $data['url'] ?? get_permalink($post->ID), // v4.4.0: Fallback to doctor URL (Yandex requires!)
                 );
@@ -336,18 +348,30 @@ class YFGP_Offer_Builder {
                         $service_id = $service['id'] ?? ('service_' . $post->ID);
                         $offer_id = 'offer_' . $post->ID . '_' . $clinic_id . '_' . $specialization_slug . '_service_' . str_replace('service_', '', $service_id);
 
+                        $service_price_value = $service['price'] ?? null;
+                        $service_currency_value = $service_price_value !== null && $service_price_value !== ''
+                            ? ($service['currency'] ?? ($this->settings['default_currency'] ?? 'RUR'))
+                            : null;
+                        $service_discount_value = $service['price_discount'] ?? null;
+                        $service_discount_name_value = (!empty($service_discount_value) && !empty($service['discount_name']))
+                            ? $service['discount_name']
+                            : null;
+                        $service_free_appointment_value = (!empty($service_discount_value) && !empty($service['free_appointment_condition']))
+                            ? $service['free_appointment_condition']
+                            : null;
+
                         $offer_data = array(
                             'id' => $offer_id,
                             'doctor_id' => $doctor_id,
                             'clinic_id' => $clinic_id, // v4.4.0: FIXED - already has clinic_ prefix!
                             'service_id' => $service_id,
                             'speciality' => $this->normalize_speciality_value($specialization_text, $fallback_spec_text), // v2.3.0: оригинальный текст! v4.18.1: FIX - защита от массивов
-                            'price' => $service['price'] ?? null,
-                            'base_price' => $service['price'] ?? null,
-                            'currency' => $this->settings['default_currency'] ?? 'RUR', // v4.18.2: УНИВЕРСАЛЬНО - из настроек
-                            'discount' => $service['price_discount'] ?? null, // v4.5.0: Discount from related prices CPT
-                            'discount_name' => $service['discount_name'] ?? null,
-                            'free_appointment_condition' => $service['free_appointment_condition'] ?? null,
+                            'price' => $service_price_value,
+                            'base_price' => $service_price_value,
+                            'currency' => $service_currency_value,
+                            'discount' => $service_discount_value, // v4.5.0: Discount from related prices CPT
+                            'discount_name' => $service_discount_name_value,
+                            'free_appointment_condition' => $service_free_appointment_value,
                             'is_base_service' => false,
                             'appointment_url' => $data['url'] ?? get_permalink($post->ID), // v4.4.0: URL fallback
                         );
