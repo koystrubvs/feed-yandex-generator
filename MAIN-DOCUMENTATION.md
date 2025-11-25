@@ -1,8 +1,9 @@
 ﻿# Yandex Feed Generator Pro - Main Documentation
 
-> **Plugin version:** 4.18.21  
-> **Last updated:** 2025-11-24  
-> **Latest:** Исправление превью данных на странице маппинга (селект постов, `get_post_type_for_tab()`), Sentry SDK интеграция.  
+> **Plugin version:** 4.18.22  
+> **Last updated:** 2025-11-25  
+> **Latest:** Комплексная проверка фида (режим «одна клиника» + `cpt_clinics="clinics"`), подтверждена работа реестра клиник.  
+> _Комментарий: описание актуализировано после повторного QA от 25.11._
 > **Purpose:** generate Yandex.Health (v2.0) YML feeds for WordPress sites  
 > **v4.18.16:** JetEngine API унифицирован (`get_meta_fields_for_object`), добавлено кэширование полей, debug логи обёрнуты в `WP_DEBUG`  
 > **Status:** Production Ready (unified mapping, ACF & JetEngine support, no hardcoded field names)
@@ -19,6 +20,7 @@
 - **Ref MCP (https://ref.tools/):** используется для поиска внешней документации. Конфиг: `"Ref": { "type": "http", "url": "https://api.ref.tools/mcp?apiKey=<YOUR_API_KEY>" }`. Перед изменениями библиотек/API выполняем `ref_search_documentation` → `ref_read_url`; Context7 применяем только если Ref не дал ответ.
 - **WordPress MCP:** установлен плагин `wordpress-mcp` + прокси `@automattic/mcp-wordpress-remote`. Конфиг MCP: `"wordpress-mcp": { "command": "npx", "args": ["-y", "@automattic/mcp-wordpress-remote@latest"], "env": { "WP_API_URL": "http://localhost:8000", "JWT_TOKEN": "<актуальный токен>" } }`. Используется для обращения к REST/MCP инструментам WordPress прямо из Cursor (CRUD по постам, пользователям, WooCommerce и т.д.).
 - **Sentry MCP:** удалённый сервер `https://mcp.sentry.dev/mcp` (OAuth конфигурация). Позволяет просматривать ошибки, релизы, проекты и вызывать Seer для автоматического анализа. Используем в QA/REFLECT режимах, чтобы убедиться, что новые баги не появляются после правок.
+- **Gemini MCP (Smart Tool Intelligence):** локальный сервер `tools/gemini-mcp-server-3` на базе Gemini 3 (чат, генерация/редактирование изображений, транскрипция аудио, анализ видео/изображений, выполнение кода). Конфиг `~/.cursor/mcp.json`: `"gemini-mcp": { "type": "stdio", "command": "node", "args": ["D:/feed/tools/gemini-mcp-server-3/gemini-server.js"], "env": { "GEMINI_API_KEY": "<SET_GEMINI_API_KEY>" } }`. Перед использованием выполните `npm install` в каталоге сервера и получите ключ в Google AI Studio.
 - **Sentry SDK:** интегрирован `sentry/sentry` (v4.0+) для production мониторинга. Класс `YFGP_Sentry_Integration` (`includes/class-sentry-integration.php`) инициализируется на хуке `init`, интегрирован с `YFGP_Error_Handler`. Настройки в админке: `sentry_enabled`, `sentry_dsn`, `sentry_traces_sample_rate`. Документация: `SENTRY-INSTALLATION.md`.
 - **GitHub (public release):** https://github.com/lutyi2856/feed-yandex-generator (`main`). Локальный `.git` живёт в `wp-content/plugins/yandex-feed-generator-pro-v2/`; синхронизируем production-структуру (исключаем `dev-artifacts/`, `vendor/`, `.phpunit.cache/`, backup/temp файлы по `.gitignore`). Источник правды — контейнер `wp` (порт 8000), собранный код пушим только после `Sync-Plugin-From-Container`.
 
@@ -94,9 +96,21 @@ Data flow: admin saves mapping → cron/manual generation вызывает `gene
 
 ## 2025-11-24 updates (v4.18.22)
 
-- **Automatic base service hardening:** `create_auto_base_service()` больше не генерирует технические описания и не проставляет «0 ₽». Название и description берутся из пользовательского поля «Название базовой услуги» (или карты специализаций), а цена появляется только если в `yfgp_settings['default_auto_service_price']` задано числовое значение. Это исключает “бесплатные” офферы и делает поведение полностью управляемым из настроек UI.
+- **Automatic base service hardening:** `create_auto_base_service()` больше не генерирует технические описания и не проставляет «0 ₽». Название и description берутся из пользовательского поля «Название базовой услуги» (или карты специализаций), а цена появляется только если в `yfgp_settings['default_auto_service_price']` задано числовое значение. Это исключает "бесплатные" офферы и делает поведение полностью управляемым из настроек UI.
 - **Offer price guards:** `class-offer-builder.php` и `class-feed-xml-writer.php` научились учитывать пустые значения (`''`, `null`, `'0'`). Если на услуги нет цены/скидки, блок `<price>` и атрибуты `currency/discount_name` вовсе не выводятся, благодаря чему smoke сравнение JSON ↔ YML проходит без диффов.
 - **Fix encoding issues (cracked characters):** все кракозябры в `class-feed-generator-v2.php` и вспомогательных файлах исправлены, комментарии приведены к UTF-8 без BOM.
+
+## 2025-11-25 updates (v4.18.22)
+
+- **Single clinic mode (режим "одна клиника"):** добавлен режим работы с одной клиникой для всех врачей. При выборе опции "-- Одна клиника (заполнить через маппинг) --" в настройках (`cpt_clinics = ""`):
+  - Поле связи `clinics` скрывается в табе "Врачи" (UI)
+  - Секция связей `clinics_doctors_relationship` скрывается в табе "Клиники" (UI)
+  - Отображается информационное сообщение о режиме "одна клиника"
+  - Данные клиники извлекаются из маппинга (поля `clinics_*`) через метод `get_single_clinic_from_mapping()`
+  - Все врачи автоматически связываются с одной клиникой (ID: `default_clinic`)
+  - Клиника дедуплицируется в фиде (все врачи используют одну и ту же клинику)
+  - Fallback значения: `name` из `company_name`, `city` из `city` (настройки плагина)
+- **Clinic registry validation:** при `cpt_clinics="clinics"` генератор выгружает опубликованные клиники (ID 13514/13517/13525) и размножает офферы по клиникам без нарушения исключений и базовых услуг. Детальный отчёт — `memory-bank/qa-reports/feed-comprehensive-validation-2025-11-25.md`.
 
 ## 2025-11-20 updates (v4.18.20)
 

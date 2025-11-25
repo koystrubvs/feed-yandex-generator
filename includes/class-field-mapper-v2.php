@@ -356,9 +356,25 @@ class YFGP_Field_Mapper_V2 extends YFGP_Field_Mapper {
         // Образование, Работа, Сертификаты (repeater fields)
         // ПРИМЕЧАНИЕ: V2 НЕ использовал repeater helper, логика упрощена
         
-        // Клиники (связь)
-        // v4.1.0-beta28: Получаем связи с клиниками
-        if (!empty($mapping['clinics'])) {
+        // Клиники (связь или режим "одна клиника")
+        // v4.18.22: Режим "одна клиника" - если CPT не выбран, используем данные из маппинга
+        $settings = get_option('yfgp_settings', array());
+        $is_single_clinic_mode = empty($settings['cpt_clinics']);
+        
+        if ($is_single_clinic_mode) {
+            // Режим "одна клиника" - извлекаем данные из маппинга напрямую
+            // v4.18.22: DEBUG - логируем вызов метода
+            error_log('YFGP v4.18.22 DEBUG map_post_data_v2: Single clinic mode active for post_id: ' . $post->ID);
+            $clinic_data = $this->get_single_clinic_from_mapping($mapping, $post->ID);
+            error_log('YFGP v4.18.22 DEBUG map_post_data_v2: get_single_clinic_from_mapping returned: ' . var_export($clinic_data, true));
+            if (!empty($clinic_data)) {
+                $data['clinics'][] = $clinic_data;
+                error_log('YFGP v4.18.22 DEBUG map_post_data_v2: Added clinic to $data[clinics], count: ' . count($data['clinics']));
+            } else {
+                error_log('YFGP v4.18.22 DEBUG map_post_data_v2: clinic_data is empty, NOT adding to $data[clinics]');
+            }
+        } elseif (!empty($mapping['clinics'])) {
+            // Обычный режим - получаем связи с клиниками через CPT
             $clinic_ids = $this->get_related_posts($post->ID, $mapping['clinics']);
             
             if (!empty($clinic_ids)) {
@@ -988,6 +1004,97 @@ class YFGP_Field_Mapper_V2 extends YFGP_Field_Mapper {
         }
 
         return ucwords($value);
+    }
+    
+    /**
+     * v4.18.22: Получить данные одной клиники из маппинга (режим "одна клиника")
+     * 
+     * Извлекает данные клиники из маппинга полей напрямую, без поиска связей через CPT.
+     * Используется когда в настройках не выбран CPT для клиник.
+     * 
+     * @param array<string, mixed> $mapping Маппинг полей врача
+     * @param int $post_id ID поста врача (для fallback значений)
+     * @return array<string, mixed> Данные клиники или пустой массив
+     */
+    public function get_single_clinic_from_mapping(array $mapping, int $post_id): array {
+        if (!class_exists('YFGP_Field_Mapper_Unified')) {
+            require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
+        }
+        
+        $mapper_unified = YFGP_Field_Mapper_Unified::get_instance();
+        $clinic_mapping = get_option('yfgp_field_mapping_v3', array());
+        $settings = get_option('yfgp_settings', array());
+        
+        // Базовые данные клиники
+        // v4.18.22: FIX - используем 'default' вместо 'default_clinic' для совместимости с офферами
+        $clinic_data = array(
+            'id' => 'default',
+            'internal_id' => 0,
+            'name' => $settings['company_name'] ?? 'Основная клиника',
+        );
+        
+        // Маппинг полей клиники из маппинга V3
+        $clinic_field_mappings = array(
+            'clinics_id' => 'id',
+            'clinics_name' => 'name',
+            'clinics_address' => 'address',
+            'clinics_phone' => 'phone',
+            'clinics_email' => 'email',
+            'clinics_url' => 'url',
+            'clinics_metro' => 'metro',
+            'clinics_geo_lat' => 'geo_lat',
+            'clinics_geo_lon' => 'geo_lon',
+            'clinics_code' => 'clinic_code',
+            'clinics_picture' => 'picture',
+            'clinics_company_id' => 'company_id',
+            'clinics_city' => 'city',
+        );
+        
+        // Извлекаем значения из маппинга (используем post_id врача как контекст)
+        foreach ($clinic_field_mappings as $mapping_key => $output_key) {
+            if (!empty($clinic_mapping[$mapping_key])) {
+                $value = $mapper_unified->getFieldValue($post_id, $clinic_mapping[$mapping_key]);
+                
+                if (!empty($value)) {
+                    // v4.2.2: UNIVERSAL picture conversion (array, string, comma-separated)
+                    if ($output_key === 'picture' && !empty($value)) {
+                        // Если уже URL - оставляем как есть
+                        if (is_string($value) && filter_var($value, FILTER_VALIDATE_URL)) {
+                            $clinic_data[$output_key] = $value;
+                        }
+                        // Если массив - берем первый элемент
+                        elseif (is_array($value)) {
+                            $first_id = is_numeric($value[0]) ? intval($value[0]) : null;
+                            $clinic_data[$output_key] = $first_id ? wp_get_attachment_url($first_id) : '';
+                        }
+                        // Если строка с запятыми (gallery IDs) - explode и берем первый
+                        elseif (is_string($value) && strpos($value, ',') !== false) {
+                            $ids = array_map('trim', explode(',', $value));
+                            $first_id = is_numeric($ids[0]) ? intval($ids[0]) : null;
+                            $clinic_data[$output_key] = $first_id ? wp_get_attachment_url($first_id) : '';
+                        }
+                        // Если просто число/строка с числом - конвертим
+                        elseif (is_numeric($value)) {
+                            $clinic_data[$output_key] = wp_get_attachment_url(intval($value));
+                        } else {
+                            $clinic_data[$output_key] = $value; // Fallback
+                        }
+                    } else {
+                        $clinic_data[$output_key] = $value;
+                    }
+                }
+            }
+        }
+        
+        // Fallback для обязательных полей из настроек
+        if (empty($clinic_data['name'])) {
+            $clinic_data['name'] = $settings['company_name'] ?? 'Основная клиника';
+        }
+        if (empty($clinic_data['city'])) {
+            $clinic_data['city'] = $settings['city'] ?? 'г. Севастополь';
+        }
+        
+        return $clinic_data;
     }
 }
 

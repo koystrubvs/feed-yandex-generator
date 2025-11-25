@@ -22,6 +22,9 @@ $post_type = $settings['post_type'] ?? 'doctors';
 $current_mapping = get_option('yfgp_field_mapping_v3', array());
 $data_sources = get_option('yfgp_settings', array());
 
+// v4.18.22: Режим "одна клиника" - проверка
+$is_single_clinic_mode = empty($settings['cpt_clinics']);
+
 $mapping_context = isset($mapping_context) && is_array($mapping_context) ? $mapping_context : array();
 $mapping_context_labels = isset($mapping_context_labels) && is_array($mapping_context_labels) ? $mapping_context_labels : array();
 
@@ -691,7 +694,12 @@ $offer_config = get_option('yfgp_offer_config', array());
                 <p class="description">Заполните для более полной информации в фиде</p>
                 
                 <div class="yfgp-mapping-grid">
-                    <?php foreach ($doctors_optional_fields as $field_id => $field_info): ?>
+                    <?php foreach ($doctors_optional_fields as $field_id => $field_info): 
+                        // v4.18.22: Скрыть поле связи с клиниками в режиме "одна клиника"
+                        if ($field_id === 'clinics' && $is_single_clinic_mode) {
+                            continue;
+                        }
+                    ?>
                         <div class="yfgp-mapping-card" data-field-id="<?php echo esc_attr($field_id); ?>">
                             <div class="card-header">
                                 <h3>
@@ -812,6 +820,17 @@ $offer_config = get_option('yfgp_offer_config', array());
         <!-- ====================== TAB 2: КЛИНИКИ ====================== -->
         <div id="tab-clinics" class="yfgp-tab-content">
             
+            <?php if ($is_single_clinic_mode): ?>
+            <!-- v4.18.22: Информационное сообщение для режима "одна клиника" -->
+            <div class="notice notice-info inline" style="margin: 20px 0; padding: 15px; background: #e7f5fe; border-left: 4px solid #2271b1;">
+                <p style="margin: 0; font-size: 14px;">
+                    <strong>🏥 Режим "Одна клиника" активен</strong><br>
+                    Все врачи будут автоматически связаны с одной клиникой. Заполните данные клиники ниже. 
+                    Поле связи с врачами отключено, так как связь устанавливается автоматически.
+                </p>
+            </div>
+            <?php endif; ?>
+            
             <!-- Обязательные поля -->
             <div class="yfgp-mapping-section">
                 <h2 style="color: #d63638;">⚠️ Обязательные поля клиники</h2>
@@ -883,6 +902,8 @@ $offer_config = get_option('yfgp_offer_config', array());
             </div>
             
             <!-- Связи -->
+            <?php if (!$is_single_clinic_mode): ?>
+            <!-- v4.18.22: Скрыть связи в режиме "одна клиника" -->
             <div class="yfgp-mapping-section" style="margin-top: 30px;">
                 <h2 style="color: #ea580c;">🔗 Связи клиники</h2>
                 <p class="description">Настройте связи клиники с другими сущностями</p>
@@ -914,6 +935,7 @@ $offer_config = get_option('yfgp_offer_config', array());
                     <?php endforeach; ?>
                 </div>
             </div>
+            <?php endif; ?>
         </div>
         
         <!-- ====================== TAB 3: УСЛУГИ ====================== -->

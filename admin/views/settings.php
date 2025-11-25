@@ -261,7 +261,7 @@ try {
                 <th scope="row"><label for="cpt_clinics">Тип записи для клиник</label></th>
                 <td>
                     <select id="cpt_clinics" name="cpt_clinics" class="regular-text">
-                        <option value="">-- не выбрано --</option>
+                        <option value="">-- Одна клиника (заполнить через маппинг) --</option>
                         <?php foreach ($post_types as $pt): ?>
                             <option value="<?php echo esc_attr($pt->name); ?>" 
                                     <?php selected($settings['cpt_clinics'] ?? '', $pt->name); ?>>
@@ -269,6 +269,10 @@ try {
                             </option>
                         <?php endforeach; ?>
                     </select>
+                    <p class="description">
+                        <strong>Режим "Одна клиника":</strong> Если не выбран CPT, все врачи будут автоматически связаны с одной клиникой. 
+                        Данные клиники заполняются на странице <a href="<?php echo admin_url('admin.php?page=yandex-feed-generator-mapping'); ?>">Маппинг полей</a> в табе "Клиники".
+                    </p>
                 </td>
             </tr>
             

@@ -209,16 +209,24 @@ class YFGP_Entity_Collector {
         error_log("YFGP v4.18.21 DEBUG EntityCollector collect_entities: AFTER copying - data[adult_appointment] = " . var_export($data['adult_appointment'] ?? 'NOT SET', true) . ", data[children_appointment] = " . var_export($data['children_appointment'] ?? 'NOT SET', true) . " for doctor_id: " . ($doctor_entity['id'] ?? 'unknown'));
 
         // Process clinics
+        // v4.18.22: DEBUG - логируем клиники из $data
+        error_log('YFGP v4.18.22 DEBUG EntityCollector: $data[clinics] = ' . var_export($data['clinics'] ?? 'NOT SET', true) . ' for post_id: ' . $post->ID);
         $post_clinics = $data['clinics'] ?? array(array('id' => 'default', 'name' => '', 'address' => '', 'phone' => '', 'city' => ''));
+        error_log('YFGP v4.18.22 DEBUG EntityCollector: $post_clinics count = ' . count($post_clinics) . ' for post_id: ' . $post->ID);
         foreach ($post_clinics as $clinic_data) {
             $clinic_id = $clinic_data['id'] ?? 'clinic_' . $post->ID;
+            error_log('YFGP v4.18.22 DEBUG EntityCollector: Processing clinic with id = ' . $clinic_id . ', name = ' . ($clinic_data['name'] ?? 'NOT SET') . ', url = ' . ($clinic_data['url'] ?? 'NOT SET'));
             if (!isset($clinics[$clinic_id])) {
                 // v4.18.17: Проверка наличия callback перед использованием
                 if ($this->build_clinic_entity_callback === null) {
                     throw new \RuntimeException('build_clinic_entity_callback не установлен. Используйте setCallbacks() для установки callbacks.');
                 }
                 $build_clinic = $this->build_clinic_entity_callback;
-                $clinics[$clinic_id] = $build_clinic($clinic_data);
+                $built_clinic = $build_clinic($clinic_data);
+                error_log('YFGP v4.18.22 DEBUG EntityCollector: Built clinic with id = ' . ($built_clinic['id'] ?? 'NOT SET') . ', name = ' . ($built_clinic['name'] ?? 'NOT SET') . ', url = ' . ($built_clinic['url'] ?? 'NOT SET'));
+                $clinics[$clinic_id] = $built_clinic;
+            } else {
+                error_log('YFGP v4.18.22 DEBUG EntityCollector: Clinic with id = ' . $clinic_id . ' already exists in $clinics array');
             }
         }
 
