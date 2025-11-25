@@ -963,6 +963,15 @@ class YFGP_Feed_Generator_V2 {
                 }
             }
         }
+
+        // v4.18.22: Single clinic mode - inject clinic from mapping when CPT is not selected
+        $is_single_clinic_mode = empty($this->settings['cpt_clinics'] ?? '');
+        if ($is_single_clinic_mode) {
+            $single_clinic = $this->field_mapper->get_single_clinic_from_mapping($mapping, $post->ID);
+            if (!empty($single_clinic)) {
+                $data['clinics'] = array($single_clinic);
+            }
+        }
         
         // Extract services (relationships)
         if (!empty($mapping['services'])) {
@@ -1980,10 +1989,13 @@ class YFGP_Feed_Generator_V2 {
                     : $clinic_id // If post_type not exists - keep clinic_id as is
             );
         
-        // Clinic URL = post permalink (NOT site URL!)
-        $clinic_url = $clinic_post_id 
-            ? get_permalink($clinic_post_id) 
-            : ($this->settings['company_url'] ?? get_site_url());
+        // Clinic URL = из маппинга (если есть), иначе post permalink, иначе настройки
+        // v4.18.22: FIX - используем url из $clinic_data (режим "одна клиника")
+        $clinic_url = !empty($clinic_data['url']) 
+            ? $clinic_data['url'] 
+            : ($clinic_post_id 
+                ? get_permalink($clinic_post_id) 
+                : ($this->settings['company_url'] ?? get_site_url()));
         
         // Base fields
         $clinic = array(
