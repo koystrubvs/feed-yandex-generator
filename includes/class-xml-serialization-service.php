@@ -1474,11 +1474,11 @@ class YFGP_Xml_Serialization_Service {
                 }
                 
                 // Создаём временный mapping для normalize_specialities() (как для specialities)
-                // v4.18.2: Важно передать source_field_key для ACF полей (через acf_get_field_reference)
+                // v4.18.21: Важно передать source_field_key для ACF полей (через acf_get_reference)
                 $source_field_key = $field_config['source_field_key'] ?? '';
-                if (empty($source_field_key) && function_exists('acf_get_field_reference')) {
+                if (empty($source_field_key) && function_exists('acf_get_reference')) {
                     // Пробуем получить ACF field reference (как в normalize_specialities())
-                    $field_reference = acf_get_field_reference($source_field, $post_id);
+                    $field_reference = acf_get_reference($source_field, $post_id);
                     if (!$field_reference) {
                         $field_reference = get_post_meta($post_id, '_' . $source_field, true);
                     }

@@ -1350,11 +1350,11 @@ class YFGP_Feed_Generator_V2 {
                 }
                 
                 // Create temporary mapping for normalize_specialities() (as for specialities)
-                // v4.18.2: Important to pass source_field_key for ACF fields (via acf_get_field_reference)
+                // v4.18.21: Important to pass source_field_key for ACF fields (via acf_get_reference)
                 $source_field_key = $field_config['source_field_key'] ?? '';
-                if (empty($source_field_key) && function_exists('acf_get_field_reference')) {
+                if (empty($source_field_key) && function_exists('acf_get_reference')) {
                     // Try to get ACF field reference (as in normalize_specialities())
-                    $field_reference = acf_get_field_reference($source_field, $post_id);
+                    $field_reference = acf_get_reference($source_field, $post_id);
                     if (!$field_reference) {
                         $field_reference = get_post_meta($post_id, '_' . $source_field, true);
                     }
