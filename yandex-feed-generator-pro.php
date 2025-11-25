@@ -871,48 +871,10 @@ class Yandex_Feed_Generator_Pro {
         
 
         $tab_type = sanitize_text_field($_POST['tab_type'] ?? 'doctors');
-
-        
-
-        // Tab-to-PostType mapping (универсальный!)
-
-        $post_type_map = array(
-
-            'doctors' => 'doctors',
-
-            'clinics' => 'clinics',
-
-            'services' => 'services',
-
-            'offers' => 'doctors' // offers based on врач
-
-        );
-
-        
-
-        if (!isset($post_type_map[$tab_type])) {
-
-            wp_send_json_error('Invalid tab type');
-
-        }
-
-        
-
-        $post_type = $post_type_map[$tab_type];
-
         $settings = get_option('yfgp_settings', array());
-
         
-
-        // Если post_type настроен в settings - используем его (универсальность!)
-
-        $settings_key = 'cpt_' . $tab_type;
-
-        if (isset($settings[$settings_key]) && !empty($settings[$settings_key])) {
-
-            $post_type = $settings[$settings_key];
-
-        }
+        // v4.18.21: Используем универсальную функцию для определения post_type
+        $post_type = $this->get_post_type_for_tab($tab_type, $settings);
 
         
 
@@ -960,6 +922,33 @@ class Yandex_Feed_Generator_Pro {
 
         ));
 
+    }
+
+    /**
+     * Определить post_type для таба (универсальный метод)
+     * 
+     * @param string $tab_type Тип таба (doctors/clinics/services/offers)
+     * @param array $settings Настройки плагина
+     * @return string Post type
+     */
+    private function get_post_type_for_tab($tab_type, $settings) {
+        switch ($tab_type) {
+            case 'doctors':
+                return $settings['post_type'] ?? 'doctors';
+            
+            case 'clinics':
+                return $settings['cpt_clinics'] ?? 'clinics';
+            
+            case 'services':
+                return $settings['cpt_services'] ?? 'services';
+            
+            case 'offers':
+                // Offers основаны на врачах
+                return $settings['post_type'] ?? 'doctors';
+            
+            default:
+                return 'doctors';
+        }
     }
 
     
@@ -1018,55 +1007,53 @@ class Yandex_Feed_Generator_Pro {
 
             error_log("🔵 YFGP: Settings loaded");
 
-            $post_type = $settings['post_type'] ?? 'doctors';
+            // v4.18.21: Получаем tab_type ПЕРЕД определением post_type для правильного определения типа поста
+            $tab_type = sanitize_text_field($_POST['tab_type'] ?? 'doctors');
+            $post_type = $this->get_post_type_for_tab($tab_type, $settings);
 
-            error_log("🔵 YFGP: Post type = {$post_type}");
+            error_log("🔵 YFGP: Tab type = {$tab_type}, Post type = {$post_type}");
 
             
 
-            // Получаем переданный post_id или используем первый доступный
+            // v4.18.21: Получаем переданный post_id (ОБЯЗАТЕЛЬНО для корректного превью!)
+            // Если post_id не передан - это ошибка, т.к. пользователь должен выбрать пост из селекта
 
             $post_id = intval($_POST['post_id'] ?? 0);
+
+            error_log("🔵 YFGP: Post ID from request = {$post_id}");
 
             
 
             if ($post_id > 0) {
 
-                // Используем переданный post_id
+                // Используем переданный post_id (выбранный пользователем из селекта)
 
                 $post = get_post($post_id);
 
-                if (!$post || $post->post_type !== $post_type) {
+                if (!$post) {
 
-                    wp_send_json_error('Пост не найден или неправильный тип');
+                    error_log("❌ YFGP: Post {$post_id} not found");
+
+                    wp_send_json_error('Пост не найден');
 
                 }
+
+                if ($post->post_type !== $post_type) {
+
+                    error_log("❌ YFGP: Post {$post_id} type mismatch: expected {$post_type}, got {$post->post_type}");
+
+                    wp_send_json_error('Неправильный тип поста. Ожидается: ' . $post_type . ', получен: ' . $post->post_type);
+
+                }
+
+                error_log("✅ YFGP: Using selected post ID {$post_id} ({$post->post_title})");
 
             } else {
 
-                // Получаем первый пост для тестирования
+                // v4.18.21: Если post_id не передан - это ошибка (пользователь должен выбрать пост)
+                error_log("❌ YFGP: Post ID not provided in request");
 
-                $posts = get_posts(array(
-
-                    'post_type' => $post_type,
-
-                    'post_status' => 'publish',
-
-                    'posts_per_page' => 1
-
-                ));
-
-                
-
-                if (empty($posts)) {
-
-                    wp_send_json_error('Посты не найдены');
-
-                }
-
-                
-
-                $post = $posts[0];
+                wp_send_json_error('Пожалуйста, выберите пост из списка для тестирования');
 
             }
 
@@ -1423,56 +1410,30 @@ class Yandex_Feed_Generator_Pro {
             
 
             // v4.2.0: POST-PROCESSING для Clinics - используем РЕАЛЬНУЮ клинику!
-
-            $tab_type = sanitize_text_field($_POST['tab_type'] ?? 'doctors');
-
-            
+            // v4.18.21: tab_type уже получен выше, не дублируем
 
             if ($tab_type === 'clinics') {
 
-                // v4.2.0: FIXED - Test Preview для clinics должен показывать КЛИНИКУ, не врача!
+                // v4.18.21: Используем выбранный пост из селекта (уже получен выше как $post)
+                // НЕ нужно получать первый пост - используем выбранный пользователем!
 
-                
+                $clinic_post = $post; // Используем выбранный пост из селекта
 
-                // Получаем РЕАЛЬНУЮ клинику из post_type=clinics
+                // Extract clinic fields using V3 mapper from CLINIC post
 
-                $clinic_posts = get_posts(array(
+                if (!class_exists('YFGP_Field_Mapper_Unified')) {
 
-                    'post_type' => 'clinics',
+                    require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
 
-                    'post_status' => 'publish',
+                }
 
-                    'posts_per_page' => 1
+                $mapper_unified = YFGP_Field_Mapper_Unified::get_instance();
 
-                ));
+                $clinic_mapping = get_option('yfgp_field_mapping_v3', array());
 
-                
+                // Extract clinic fields via V3 API from CLINIC post
 
-                if (!empty($clinic_posts)) {
-
-                    $clinic_post = $clinic_posts[0];
-
-                    
-
-                    // Extract clinic fields using V3 mapper from CLINIC post
-
-                    if (!class_exists('YFGP_Field_Mapper_Unified')) {
-
-                        require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
-
-                    }
-
-                    
-
-                    $mapper_unified = YFGP_Field_Mapper_Unified::get_instance();
-
-                    $clinic_mapping = get_option('yfgp_field_mapping_v3', array());
-
-                    
-
-                    // Extract clinic fields via V3 API from CLINIC post
-
-                    $clinic_fields = array('clinics_address', 'clinics_phone', 'clinics_email', 'clinics_picture', 'clinics_city', 'clinics_url', 'clinics_id', 'clinics_name', 'clinics_company_id');
+                $clinic_fields = array('clinics_address', 'clinics_phone', 'clinics_email', 'clinics_picture', 'clinics_city', 'clinics_url', 'clinics_id', 'clinics_name', 'clinics_company_id');
 
                     foreach ($clinic_fields as $field_key) {
 
@@ -1538,47 +1499,39 @@ class Yandex_Feed_Generator_Pro {
 
                         }
 
-                    }
+                }
 
-                    
+                // Fallback для базовых полей
 
-                    // Fallback для базовых полей
+                if (empty($data['clinics_id'])) {
 
-                    if (empty($data['clinics_id'])) {
-
-                        $data['clinics_id'] = 'clinic_' . $clinic_post->ID;
-
-                    }
-
-                    if (empty($data['clinics_name'])) {
-
-                        $data['clinics_name'] = $clinic_post->post_title;
-
-                    }
-
-                    if (empty($data['clinics_url'])) {
-
-                        $data['clinics_url'] = get_permalink($clinic_post->ID);
-
-                    }
-
-                    
-
-                    // Picture - ALWAYS override with featured image if available
-
-                    if (has_post_thumbnail($clinic_post->ID)) {
-
-                        $data['clinics_picture'] = get_the_post_thumbnail_url($clinic_post->ID, 'full');
-
-                    }
-
-                    
-
-                    // Обновляем post для generate_test_yml_preview
-
-                    $post = $clinic_post;
+                    $data['clinics_id'] = 'clinic_' . $clinic_post->ID;
 
                 }
+
+                if (empty($data['clinics_name'])) {
+
+                    $data['clinics_name'] = $clinic_post->post_title;
+
+                }
+
+                if (empty($data['clinics_url'])) {
+
+                    $data['clinics_url'] = get_permalink($clinic_post->ID);
+
+                }
+
+                // Picture - ALWAYS override with featured image if available
+
+                if (has_post_thumbnail($clinic_post->ID)) {
+
+                    $data['clinics_picture'] = get_the_post_thumbnail_url($clinic_post->ID, 'full');
+
+                }
+
+                // Обновляем post для generate_test_yml_preview
+
+                $post = $clinic_post;
 
                 
 
@@ -1614,71 +1567,28 @@ class Yandex_Feed_Generator_Pro {
 
             if ($tab_type === 'services') {
 
-                // Get REAL service post (not doctor, not test posts!)
+                // v4.18.21: Используем выбранный пост из селекта (уже получен выше как $post)
+                // НЕ нужно получать первый пост - используем выбранный пользователем!
 
-                $services = get_posts(array(
+                $service_post = $post; // Используем выбранный пост из селекта
 
-                    'post_type' => 'services',
+                // Extract service fields via V3 mapper (same pattern as clinics!)
 
-                    'posts_per_page' => 5, // v4.3.1: Get multiple to skip test posts
+                if (!class_exists('YFGP_Field_Mapper_Unified')) {
 
-                    'orderby' => 'date',
-
-                    'order' => 'ASC', // v4.3.1: Old posts first (real services, not test)
-
-                    'post_status' => 'publish'
-
-                ));
-
-                
-
-                // v4.3.1: Skip test posts (with ТЕСТ in title)
-
-                $service_post = null;
-
-                foreach ($services as $service) {
-
-                    if (stripos($service->post_title, 'ТЕСТ') === false && 
-
-                        stripos($service->post_title, 'TEST') === false) {
-
-                        $service_post = $service;
-
-                        break;
-
-                    }
+                    require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
 
                 }
 
-                
+                $mapper_unified = YFGP_Field_Mapper_Unified::get_instance();
 
-                if (!empty($services)) {
+                $service_mapping = get_option('yfgp_field_mapping_v3', array());
 
-                    $service_post = $services[0];
+                // Extract service fields via V3 API from SERVICE post
 
-                    
+                $service_fields = array('services_description', 'services_gov_id', 'services_picture', 'services_url', 'services_id', 'services_name');
 
-                    // Extract service fields via V3 mapper (same pattern as clinics!)
-
-                    if (!class_exists('YFGP_Field_Mapper_Unified')) {
-
-                        require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
-
-                    }
-
-                    
-
-                    $mapper_unified = YFGP_Field_Mapper_Unified::get_instance();
-
-                    $service_mapping = get_option('yfgp_field_mapping_v3', array());
-
-                    
-
-                    // Extract service fields via V3 API from SERVICE post
-
-                    $service_fields = array('services_description', 'services_gov_id', 'services_picture', 'services_url', 'services_id', 'services_name');
-
-                    foreach ($service_fields as $field_key) {
+                foreach ($service_fields as $field_key) {
 
                         if (!empty($service_mapping[$field_key])) {
 
@@ -1744,49 +1654,39 @@ class Yandex_Feed_Generator_Pro {
 
                     }
 
-                    
+                // Fallback для базовых полей
 
-                    // Fallback для базовых полей
+                if (empty($data['services_id'])) {
 
-                    if (empty($data['services_id'])) {
-
-                        $data['services_id'] = 'service_' . $service_post->ID;
-
-                    }
-
-                    if (empty($data['services_name'])) {
-
-                        $data['services_name'] = $service_post->post_title;
-
-                    }
-
-                    
-
-                    // Picture - ALWAYS override with featured image if available
-
-                    if (has_post_thumbnail($service_post->ID)) {
-
-                        $data['services_picture'] = get_the_post_thumbnail_url($service_post->ID, 'full');
-
-                    }
-
-                    
-
-                    // HTML cleanup for description
-
-                    if (!empty($data['services_description'])) {
-
-                        $data['services_description'] = strip_tags($data['services_description']);
-
-                    }
-
-                    
-
-                    // Обновляем post для generate_test_yml_preview
-
-                    $post = $service_post;
+                    $data['services_id'] = 'service_' . $service_post->ID;
 
                 }
+
+                if (empty($data['services_name'])) {
+
+                    $data['services_name'] = $service_post->post_title;
+
+                }
+
+                // Picture - ALWAYS override with featured image if available
+
+                if (has_post_thumbnail($service_post->ID)) {
+
+                    $data['services_picture'] = get_the_post_thumbnail_url($service_post->ID, 'full');
+
+                }
+
+                // HTML cleanup for description
+
+                if (!empty($data['services_description'])) {
+
+                    $data['services_description'] = strip_tags($data['services_description']);
+
+                }
+
+                // Обновляем post для generate_test_yml_preview
+
+                $post = $service_post;
 
             }
 
@@ -2038,19 +1938,25 @@ class Yandex_Feed_Generator_Pro {
 
                 if (!empty($data['degree'])) {
 
-                    $yml .= "    <degree>" . esc_html($data['degree']) . "</degree>\n";
+                    // v4.18.21: Обработка массива для degree (Sentry YANDEX-FEED-GENERATOR-PRO-10)
+                    $degree_value = is_array($data['degree']) ? implode(', ', $data['degree']) : $data['degree'];
+                    $yml .= "    <degree>" . esc_html($degree_value) . "</degree>\n";
 
                 }
 
                 if (!empty($data['rank'])) {
 
-                    $yml .= "    <rank>" . esc_html($data['rank']) . "</rank>\n";
+                    // v4.18.21: Обработка массива для rank (Sentry YANDEX-FEED-GENERATOR-PRO-10)
+                    $rank_value = is_array($data['rank']) ? implode(', ', $data['rank']) : $data['rank'];
+                    $yml .= "    <rank>" . esc_html($rank_value) . "</rank>\n";
 
                 }
 
                 if (!empty($data['category'])) {
 
-                    $yml .= "    <category>" . esc_html($data['category']) . "</category>\n";
+                    // v4.18.21: Обработка массива для category (Sentry YANDEX-FEED-GENERATOR-PRO-10)
+                    $category_value = is_array($data['category']) ? implode(', ', $data['category']) : $data['category'];
+                    $yml .= "    <category>" . esc_html($category_value) . "</category>\n";
 
                 }
 
@@ -2068,7 +1974,9 @@ class Yandex_Feed_Generator_Pro {
 
                 if (!empty($data['reviews_total_count'])) {
 
-                    $yml .= "    <reviews_total_count>" . esc_html($data['reviews_total_count']) . "</reviews_total_count>\n";
+                    // v4.18.21: Обработка массива для reviews_total_count (Sentry YANDEX-FEED-GENERATOR-PRO-10)
+                    $reviews_count = is_array($data['reviews_total_count']) ? count($data['reviews_total_count']) : $data['reviews_total_count'];
+                    $yml .= "    <reviews_total_count>" . esc_html($reviews_count) . "</reviews_total_count>\n";
 
                 }
 

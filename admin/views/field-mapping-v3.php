@@ -1311,22 +1311,22 @@ $offer_config = get_option('yfgp_offer_config', array());
         </div>
         
         <!-- ====================== SAVE BUTTON ====================== -->
-        <div class="yfgp-save-section" style="display: flex; gap: 15px; align-items: center;">
+        <div class="yfgp-save-section" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
             <button type="submit" class="button button-primary button-hero">
-                �� Сохранить маппинг
+                💾 Сохранить маппинг
             </button>
             
-            <!-- v4.11.0: Test Preview Post Selector (4 dropdowns, один на таб) -->
-            <select id="yfgp-test-post-doctors" class="yfgp-test-post-selector" data-tab="doctors" style="display: none; min-width: 280px; padding: 8px;">
+            <!-- v4.18.21: Test Preview Post Selector (4 dropdowns, один на таб) - ПЕРЕД кнопкой теста -->
+            <select id="yfgp-test-post-doctors" class="yfgp-test-post-selector" data-tab="doctors" style="display: none; min-width: 280px; padding: 8px; height: 38px;">
                 <option value="">-- Выберите врача для теста --</option>
             </select>
-            <select id="yfgp-test-post-clinics" class="yfgp-test-post-selector" data-tab="clinics" style="display: none; min-width: 280px; padding: 8px;">
+            <select id="yfgp-test-post-clinics" class="yfgp-test-post-selector" data-tab="clinics" style="display: none; min-width: 280px; padding: 8px; height: 38px;">
                 <option value="">-- Выберите клинику для теста --</option>
             </select>
-            <select id="yfgp-test-post-services" class="yfgp-test-post-selector" data-tab="services" style="display: none; min-width: 280px; padding: 8px;">
+            <select id="yfgp-test-post-services" class="yfgp-test-post-selector" data-tab="services" style="display: none; min-width: 280px; padding: 8px; height: 38px;">
                 <option value="">-- Выберите услугу для теста --</option>
             </select>
-            <select id="yfgp-test-post-offers" class="yfgp-test-post-selector" data-tab="offers" style="display: none; min-width: 280px; padding: 8px;">
+            <select id="yfgp-test-post-offers" class="yfgp-test-post-selector" data-tab="offers" style="display: none; min-width: 280px; padding: 8px; height: 38px;">
                 <option value="">-- Выберите врача для теста --</option>
             </select>
             
@@ -1827,7 +1827,7 @@ jQuery(document).ready(function($) {
         }
     });
     
-    // v4.11.0: Обработчик кнопки "Тест текущей вкладки" (обновлён для post selector)
+    // v4.18.21: Обработчик кнопки "Тест текущей вкладки" (обновлён для post selector)
     $('#yfgp-test-mapping-btn').on('click', function(e) {
         e.preventDefault();
         var $btn = $(this);
@@ -1837,28 +1837,33 @@ jQuery(document).ready(function($) {
         var activeTab = $('.yfgp-mega-tab-wrapper .nav-tab-active').attr('href');
         var tabType = activeTab ? activeTab.replace('#tab-', '') : 'doctors';
         
-        // v4.11.0: Получить selected post_id из dropdown
+        // v4.18.21: Получить selected post_id из dropdown (ОБЯЗАТЕЛЬНО для корректного превью!)
         var $activeSelector = $('.yfgp-test-post-selector:visible');
         var selectedPostId = $activeSelector.length > 0 ? $activeSelector.val() : '';
+        
+        // v4.18.21: Валидация - если пост не выбран, показать предупреждение
+        if (!selectedPostId || selectedPostId === '') {
+            $result.show().html('<span style="color: #dc3232;">⚠️ Пожалуйста, выберите пост из списка выше для тестирования</span>');
+            setTimeout(function() {
+                $result.fadeOut();
+            }, 3000);
+            return;
+        }
         
         console.log('[YFGP Test] Tab:', tabType, 'Post ID:', selectedPostId);
         
         // Показать индикатор загрузки
         $btn.prop('disabled', true).html('⏳ Тестирование...');
-        $result.show().html('<span style="color: #666;">Загрузка...</span>');
+        $result.show().html('<span style="color: #666;">Загрузка превью для выбранного поста...</span>');
         
-        // AJAX запрос (с post_id если выбран!)
+        // AJAX запрос (с post_id - ОБЯЗАТЕЛЬНО!)
         // v4.18.13: Единый стандарт nonce для всех AJAX handlers
         var ajaxData = {
             action: 'yfgp_test_mapping',
             tab_type: tabType,
+            post_id: selectedPostId, // v4.18.21: Всегда передаем post_id (валидация выше)
             nonce: '<?php echo wp_create_nonce("yfgp_ajax_nonce"); ?>'
         };
-        
-        // v4.11.0: Добавить post_id если выбран
-        if (selectedPostId) {
-            ajaxData.post_id = selectedPostId;
-        }
         
         $.ajax({
             url: ajaxurl,

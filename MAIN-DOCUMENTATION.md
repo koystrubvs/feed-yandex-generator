@@ -2,7 +2,7 @@
 
 > **Plugin version:** 4.18.21  
 > **Last updated:** 2025-11-24  
-> **Latest:** Sentry SDK интеграция для production мониторинга, Docker конфигурация обновлена (wp на порту 8000).  
+> **Latest:** Исправление превью данных на странице маппинга (селект постов, `get_post_type_for_tab()`), Sentry SDK интеграция.  
 > **Purpose:** generate Yandex.Health (v2.0) YML feeds for WordPress sites  
 > **v4.18.16:** JetEngine API унифицирован (`get_meta_fields_for_object`), добавлено кэширование полей, debug логи обёрнуты в `WP_DEBUG`  
 > **Status:** Production Ready (unified mapping, ACF & JetEngine support, no hardcoded field names)

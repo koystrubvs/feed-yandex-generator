@@ -2063,12 +2063,12 @@ jQuery(document).ready(function ($) {
     $selector.html('<option value="">⏳ Загрузка...</option>');
 
     $.ajax({
-      url: ajaxurl,
+      url: typeof yfgpAjax !== 'undefined' ? yfgpAjax.ajax_url : ajaxurl, // v4.18.21: Используем yfgpAjax.ajax_url для консистентности
       type: "POST",
       data: {
         action: "yfgp_get_posts_list",
         tab_type: tabType,
-        security: yfgpAjax.test_mapping_nonce,
+        nonce: typeof yfgpAjax !== 'undefined' ? yfgpAjax.nonce : '', // v4.18.21: Используем единый nonce для всех AJAX handlers
       },
       success: function (response) {
         if (response.success && response.data.posts) {
@@ -2114,18 +2114,23 @@ jQuery(document).ready(function ($) {
 
   /**
    * Показать/скрыть нужный dropdown при переключении таба
+   * v4.18.21: Исправлен селектор для .yfgp-mega-tab-wrapper и regex для #tab-* формата
    */
   function updateTestPostSelector() {
-    // Определить активный таб
-    const $activeTab = $(".nav-tab-wrapper .nav-tab-active");
+    // Определить активный таб (используем .yfgp-mega-tab-wrapper вместо .nav-tab-wrapper)
+    const $activeTab = $(".yfgp-mega-tab-wrapper .nav-tab-active");
     if ($activeTab.length === 0) return;
 
     const activeTabHref = $activeTab.attr("href");
     if (!activeTabHref) return;
 
-    // Извлечь tab ID (например: #doctors-tab → doctors)
-    const tabMatch = activeTabHref.match(/#(\w+)-tab/);
-    if (!tabMatch) return;
+    // Извлечь tab ID (например: #tab-doctors → doctors)
+    // v4.18.21: Исправлен regex для формата #tab-* (было #*-tab)
+    const tabMatch = activeTabHref.match(/#tab-(\w+)/);
+    if (!tabMatch) {
+      console.warn("[YFGP Test] Could not extract tab ID from href:", activeTabHref);
+      return;
+    }
 
     const activeTab = tabMatch[1];
     console.log("[YFGP Test] Active tab:", activeTab);
@@ -2142,6 +2147,8 @@ jQuery(document).ready(function ($) {
       if ($activeSelector.find("option").length <= 1) {
         loadTestPostsList(activeTab);
       }
+    } else {
+      console.warn("[YFGP Test] Selector not found for tab:", activeTab);
     }
   }
 
@@ -2150,8 +2157,9 @@ jQuery(document).ready(function ($) {
 
   /**
    * Event listener для переключения табов
+   * v4.18.21: Исправлен селектор для .yfgp-mega-tab-wrapper
    */
-  $(".nav-tab-wrapper .nav-tab").on("click", function () {
+  $(".yfgp-mega-tab-wrapper .nav-tab").on("click", function () {
     // Небольшая задержка чтобы WordPress успел обновить .nav-tab-active
     setTimeout(updateTestPostSelector, 50);
   });

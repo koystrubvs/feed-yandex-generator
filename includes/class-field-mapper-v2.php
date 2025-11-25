@@ -709,8 +709,8 @@ class YFGP_Field_Mapper_V2 extends YFGP_Field_Mapper {
             $acf_definition = $this->unified->getAcfFieldDefinition($source_field, $post->ID);
         }
 
-        if (empty($acf_definition) && $source_field !== '' && function_exists('acf_get_field_reference')) {
-            $field_reference = acf_get_field_reference($source_field, $post->ID);
+        if (empty($acf_definition) && $source_field !== '' && function_exists('acf_get_reference')) {
+            $field_reference = acf_get_reference($source_field, $post->ID);
             if (!$field_reference && isset($post->ID)) {
                 $field_reference = get_post_meta($post->ID, '_' . $source_field, true);
             }
