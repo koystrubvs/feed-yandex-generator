@@ -892,7 +892,17 @@ $offer_config = get_option('yfgp_offer_config', array());
                                  data-default-source="<?php echo esc_attr($field_info['default_source']); ?>"
                                  <?php if (!empty($field_info['data_format_options'])): ?>
                                  data-has-format-options="true"
-                                 data-format-options="<?php echo esc_attr(json_encode($field_info['data_format_options'])); ?>"
+                                 <?php
+                                 // v4.18.28: Safe JSON encoding with error handling for HTML attribute
+                                 $format_options_json = wp_json_encode($field_info['data_format_options'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                                 if ($format_options_json === false) {
+                                     error_log('[YFGP] json_encode failed for data_format_options: ' . json_last_error_msg());
+                                     $format_options_json = '{}';
+                                 }
+                                 // Escape JSON for HTML attribute
+                                 $format_options_json_escaped = htmlspecialchars($format_options_json, ENT_QUOTES, 'UTF-8');
+                                 ?>
+                                 data-format-options="<?php echo $format_options_json_escaped; ?>"
                                  <?php endif; ?>>
                                 <!-- Dynamic Field Selector V3 -->
                             </div>
@@ -1631,8 +1641,108 @@ $offer_config = get_option('yfgp_offer_config', array());
 
 <!-- v3.1.0: JavaScript для маппинга -->
 <script>
+const yfgpInlineLog = (() => {
+    const callConsole = (method, ...args) => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        const c = window.console || {};
+        if (typeof c[method] === 'function') {
+            c[method](...args);
+        } else if (typeof c.log === 'function') {
+            c.log(...args);
+        }
+    };
+
+    const readDebugParam = () => {
+        if (typeof window === 'undefined' || !window.location) {
+            return null;
+        }
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            if (params.has('yfgp_debug')) {
+                return params.get('yfgp_debug') === '1';
+            }
+        } catch (error) {
+            const match = (window.location.search || '').match(/(?:\?|&)yfgp_debug=([^&#]+)/);
+            if (match && match[1]) {
+                return decodeURIComponent(match[1]) === '1';
+            }
+        }
+        return null;
+    };
+
+    const inlineDebugParam = (() => {
+        const paramValue = readDebugParam();
+        if (paramValue === null || typeof window === 'undefined') {
+            return null;
+        }
+        window.YFGP_DEBUG_OVERRIDE = paramValue;
+        const storageValue = paramValue ? '1' : '0';
+        if (typeof window.sessionStorage !== 'undefined') {
+            window.sessionStorage.setItem('YFGP_DEBUG_LOGS', storageValue);
+        }
+        if (typeof window.localStorage !== 'undefined') {
+            window.localStorage.setItem('YFGP_DEBUG_LOGS', storageValue);
+        }
+        return paramValue;
+    })();
+
+    const shouldDebug = () => {
+        if (typeof window === 'undefined') {
+            return false;
+        }
+        const debugParam = inlineDebugParam !== null ? inlineDebugParam : readDebugParam();
+        if (debugParam !== null) {
+            return debugParam;
+        }
+        if (window.yfgpLog && typeof window.yfgpLog.isDebugEnabled !== 'undefined') {
+            return Boolean(window.yfgpLog.isDebugEnabled);
+        }
+        if (typeof window.YFGP_DEBUG_OVERRIDE === 'boolean') {
+            return window.YFGP_DEBUG_OVERRIDE;
+        }
+        if (typeof window.YFGP_DEBUG_LOGS !== 'undefined') {
+            return Boolean(window.YFGP_DEBUG_LOGS);
+        }
+        if (window.yfgpAjax && typeof window.yfgpAjax.debug !== 'undefined') {
+            return Boolean(window.yfgpAjax.debug);
+        }
+        return false;
+    };
+    const proxyLoggerMethod = (method, ...args) => {
+        if (window.yfgpLog && typeof window.yfgpLog[method] === 'function') {
+            window.yfgpLog[method](...args);
+        } else {
+            callConsole(method, ...args);
+        }
+    };
+
+    return {
+        debug: (...args) => {
+            if (!shouldDebug()) {
+                return;
+            }
+            proxyLoggerMethod('debug', ...args);
+        },
+        info: (...args) => {
+            if (!shouldDebug()) {
+                return;
+            }
+            proxyLoggerMethod('info', ...args);
+        },
+        warn: (...args) => {
+            if (!shouldDebug()) {
+                return;
+            }
+            proxyLoggerMethod('warn', ...args);
+        },
+        error: (...args) => proxyLoggerMethod('error', ...args),
+    };
+})();
+
 jQuery(document).ready(function($) {
-    console.log('🗺️ Field Mapping V3.1 loaded');
+    yfgpInlineLog.debug('🗺️ Field Mapping V3.1 loaded');
     
     // v4.1.0: Check for saved flag and show success message
     if (sessionStorage.getItem('yfgp_mapping_saved') === 'true') {
@@ -1672,7 +1782,15 @@ jQuery(document).ready(function($) {
     
     // Initialize Dynamic Field Selectors V3
     function initializeFieldSelectors() {
-        var currentMapping = <?php echo json_encode($current_mapping); ?>;
+        <?php
+        // v4.18.28: Safe JSON encoding with error handling
+        $current_mapping_json = wp_json_encode($current_mapping, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($current_mapping_json === false) {
+            error_log('[YFGP] json_encode failed for current_mapping: ' . json_last_error_msg());
+            $current_mapping_json = '{}';
+        }
+        ?>
+        var currentMapping = <?php echo $current_mapping_json; ?>;
         
         $('.yfgp-field-container-v3').each(function() {
             var $container = $(this);
@@ -1687,9 +1805,23 @@ jQuery(document).ready(function($) {
             var currentValue = currentMapping[fieldId] || null;
             var fieldName = 'yfgp_field_mapping_v3[' + fieldId + ']';
             
-            $container.html('<div class="yfgp-dynamic-selector-wrapper" data-field-selector-v3 data-field-name="' + fieldName + '" data-post-type="' + postType + '" data-current-value=\'' + JSON.stringify(currentValue) + '\' data-is-repeater-field="' + isRepeaterField + '"></div>');
+            // v4.18.28: Escape JSON for HTML attribute to prevent syntax errors
+            var currentValueJson = JSON.stringify(currentValue || null);
+            var currentValueEscaped = currentValueJson.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+            
+            $container.html('<div class="yfgp-dynamic-selector-wrapper" data-field-selector-v3 data-field-name="' + fieldName + '" data-post-type="' + postType + '" data-current-value="' + currentValueEscaped + '" data-is-repeater-field="' + isRepeaterField + '"></div>');
             
             var $selector = $container.find('[data-field-selector-v3]');
+            
+            // v4.18.22: Safety check - ensure plugin is available
+            if (typeof jQuery === 'undefined' || typeof jQuery.fn === 'undefined' || typeof jQuery.fn.dynamicFieldSelectorV3 !== 'function') {
+                yfgpInlineLog.error('❌ [initializeFieldSelectors] jQuery plugin dynamicFieldSelectorV3 not available for field:', fieldId);
+                yfgpInlineLog.error('  ↳ jQuery available:', typeof jQuery !== 'undefined');
+                yfgpInlineLog.error('  ↳ jQuery.fn available:', typeof jQuery !== 'undefined' && typeof jQuery.fn !== 'undefined');
+                yfgpInlineLog.error('  ↳ Plugin function available:', typeof jQuery !== 'undefined' && typeof jQuery.fn !== 'undefined' && typeof jQuery.fn.dynamicFieldSelectorV3 === 'function');
+                return; // Skip this field
+            }
+            
             $selector.dynamicFieldSelectorV3({
                 fieldName: fieldName,
                 postType: postType,
@@ -1712,10 +1844,10 @@ jQuery(document).ready(function($) {
                 }, 1500); // Wait for restoreValue() to complete
             }
             
-            console.log('✅ Initialized selector for:', fieldId, isSubField ? '(sub-field of ' + parentField + ')' : '');
+            yfgpInlineLog.debug('✅ Initialized selector for:', fieldId, isSubField ? '(sub-field of ' + parentField + ')' : '');
         });
         
-        console.log('✅ All field selectors initialized');
+        yfgpInlineLog.debug('✅ All field selectors initialized');
         
         // v4.5.4: Progressive badge updates (accounts for async AJAX in restoreValue)
         setTimeout(function() {
@@ -1872,7 +2004,7 @@ jQuery(document).ready(function($) {
             return;
         }
         
-        console.log('[YFGP Test] Tab:', tabType, 'Post ID:', selectedPostId);
+        yfgpInlineLog.debug('[YFGP Test] Tab:', tabType, 'Post ID:', selectedPostId);
         
         // Показать индикатор загрузки
         $btn.prop('disabled', true).html('⏳ Тестирование...');
@@ -1884,7 +2016,7 @@ jQuery(document).ready(function($) {
             action: 'yfgp_test_mapping',
             tab_type: tabType,
             post_id: selectedPostId, // v4.18.21: Всегда передаем post_id (валидация выше)
-            nonce: '<?php echo wp_create_nonce("yfgp_ajax_nonce"); ?>'
+            nonce: '<?php echo esc_js(wp_create_nonce("yfgp_ajax_nonce")); ?>'
         };
         
         $.ajax({
@@ -1901,7 +2033,7 @@ jQuery(document).ready(function($) {
                         $result.html('<span style="color: #46b450;">✅ Preview открыт в popup!</span>');
                     } else {
                         // Fallback to console if no YML
-                        console.log('🧪 Test Result:', response.data);
+                        yfgpInlineLog.debug('🧪 Test Result:', response.data);
                         $result.html('<span style="color: #46b450;">✅ Результат в консоли (YML недоступен)</span>');
                     }
                 } else {
@@ -1916,17 +2048,38 @@ jQuery(document).ready(function($) {
             error: function(xhr, status, error) {
                 $btn.prop('disabled', false).html('🧪 Тест текущей вкладки');
                 $result.html('<span style="color: #dc3232;">❌ AJAX ошибка: ' + error + '</span>');
-                console.error('Test failed:', error);
+                yfgpInlineLog.error('Test failed:', error);
             }
         });
     });
     
-    setTimeout(function() {
+    // v4.18.22: Wait for jQuery plugin to be available
+    function waitForPlugin(callback, maxAttempts) {
+        maxAttempts = maxAttempts || 50; // 50 attempts = 5 seconds max
+        var attempts = 0;
+        var checkPlugin = function() {
+            attempts++;
+            if (typeof jQuery !== 'undefined' && typeof jQuery.fn !== 'undefined' && typeof jQuery.fn.dynamicFieldSelectorV3 === 'function') {
+                yfgpInlineLog.debug('✅ jQuery plugin dynamicFieldSelectorV3 is available after', attempts * 100, 'ms');
+                callback();
+            } else if (attempts < maxAttempts) {
+                setTimeout(checkPlugin, 100);
+            } else {
+                yfgpInlineLog.error('❌ jQuery plugin dynamicFieldSelectorV3 not available after', attempts * 100, 'ms');
+                yfgpInlineLog.error('Available:', typeof jQuery !== 'undefined', typeof jQuery.fn !== 'undefined', typeof jQuery.fn.dynamicFieldSelectorV3);
+                // Try anyway - might work if file is loading
+                callback();
+            }
+        };
+        checkPlugin();
+    }
+    
+    waitForPlugin(function() {
         initializeFieldSelectors();
         // v4.5.2: updateTabBadges() removed - called from updateFieldStatus() instead
         // This prevents race condition where badges reset to 0 before selectors initialize
-        console.log('✅ Field Mapping V3.1 fully initialized');
-    }, 500);
+        yfgpInlineLog.debug('✅ Field Mapping V3.1 fully initialized');
+    });
 });
 </script>
 
