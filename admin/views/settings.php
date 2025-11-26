@@ -332,6 +332,57 @@ try {
             </tr>
             
             <tr>
+                <td colspan="2">
+                    <div class="notice notice-info inline" style="margin: 15px 0; padding: 15px; background: #f0f8ff; border-left: 4px solid #2271b1;">
+                        <h3 style="margin-top: 0; margin-bottom: 10px;">📬 Настройка отправки email</h3>
+                        <p style="margin-bottom: 10px;">
+                            <strong>Для работы email уведомлений требуется настройка SMTP сервера.</strong> По умолчанию WordPress использует PHP функцию <code>mail()</code>, 
+                            которая может не работать на многих хостингах и в Docker контейнерах без дополнительной настройки.
+                        </p>
+                        <p style="margin-bottom: 10px;"><strong>Рекомендуемые способы настройки:</strong></p>
+                        <ol style="margin-left: 20px; margin-bottom: 10px;">
+                            <li style="margin-bottom: 8px;">
+                                <strong>Установить SMTP плагин (рекомендуется для всех WordPress сайтов):</strong>
+                                <ul style="margin-left: 20px; margin-top: 5px;">
+                                    <li>Установите плагин <strong>WP Mail SMTP</strong> (<a href="https://wordpress.org/plugins/wp-mail-smtp/" target="_blank">wordpress.org/plugins/wp-mail-smtp</a>)</li>
+                                    <li>Перейдите в <code>Настройки → WP Mail SMTP</code></li>
+                                    <li>Выберите SMTP провайдера (Gmail, Outlook, SendGrid, Mailgun или другой SMTP сервер)</li>
+                                    <li>Введите credentials и отправьте тестовое письмо</li>
+                                    <li>✅ Работает на любом WordPress сайте (хостинг, VPS, Docker)</li>
+                                </ul>
+                            </li>
+                            <li style="margin-bottom: 8px;">
+                                <strong>Настроить системный SMTP (для VPS/серверов с доступом к конфигурации):</strong>
+                                <ul style="margin-left: 20px; margin-top: 5px;">
+                                    <li><strong>Для Docker контейнеров:</strong> Отредактируйте файл <code>/etc/msmtprc</code> в контейнере</li>
+                                    <li><strong>Для обычных серверов:</strong> Настройте sendmail/postfix через системные конфигурационные файлы</li>
+                                    <li>Укажите SMTP сервер, порт, логин и пароль</li>
+                                    <li>Для Gmail используйте App Password: <a href="https://support.google.com/accounts/answer/185833" target="_blank">support.google.com/accounts/answer/185833</a></li>
+                                    <li>Пример конфигурации msmtp для Gmail (Docker):
+                                        <pre style="background: #f5f5f5; padding: 10px; margin-top: 5px; overflow-x: auto; font-size: 12px;"><code>account gmail
+host smtp.gmail.com
+port 587
+from your-email@gmail.com
+auth on
+user your-email@gmail.com
+password YOUR_APP_PASSWORD
+tls on
+tls_starttls on
+
+account default : gmail</code></pre>
+                                    </li>
+                                </ul>
+                            </li>
+                        </ol>
+                        <p style="margin-bottom: 0;">
+                            <strong>⚠️ Важно:</strong> После настройки SMTP обязательно протестируйте отправку email, включив уведомления выше и выполнив обновление фида. 
+                            Если письма не приходят, проверьте папку "Спам" и логи сервера.
+                        </p>
+                    </div>
+                </td>
+            </tr>
+            
+            <tr>
                 <th colspan="2"><h2>💰 Цены и валюта</h2></th>
             </tr>
             
