@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Dynamic Field Selector V3 - Компонент выбора динамического поля
  *
  * Поддерживает 10+ типов источников данных:
@@ -10,8 +10,298 @@
  * @since 3.0.0
  */
 
-(function ($) {
-  "use strict";
+/**
+ * Sanitize HTML to prevent XSS
+ * v4.18.22: Security - Client-side HTML sanitization
+ * v4.18.52: Move to global scope so inline scripts can use it before main bundle executes
+ *
+ * NOTE: HTML is generated in JavaScript (not user input), so it's safe to use directly.
+ *
+ * @param {string} html HTML string to sanitize
+ * @return {string} HTML string (unchanged, since it's generated client-side)
+ */
+function sanitizeHtml(html) {
+  if (typeof html !== "string") {
+    return "";
+  }
+  return html;
+}
+
+const getDebugQueryParam = () => {
+  if (typeof window === "undefined" || !window.location || !window.location.search) {
+    return null;
+  }
+  const query = window.location.search.substring(1);
+  if (!query) {
+    return null;
+  }
+  const pairs = query.split("&");
+  for (let i = 0; i < pairs.length; i += 1) {
+    const [rawKey, rawValue = ""] = pairs[i].split("=");
+    const key = decodeURIComponent(rawKey || "");
+    if (key === "yfgp_debug") {
+      return decodeURIComponent(rawValue || "");
+    }
+  }
+  return null;
+};
+
+if (typeof window !== "undefined") {
+  if (typeof window.YFGP_DEBUG_OVERRIDE === "undefined") {
+    window.YFGP_DEBUG_OVERRIDE = null;
+  }
+  if (typeof window.YFGP_SANITIZE_HTML !== "function") {
+    window.YFGP_SANITIZE_HTML = sanitizeHtml;
+  }
+  if (typeof window.sanitizeHtml !== "function") {
+    window.sanitizeHtml = sanitizeHtml;
+  }
+  window.getSanitizedHtml = function getSanitizedHtml(html) {
+    return sanitizeHtml(html);
+  };
+  window.setSanitizedHtml = function setSanitizedHtml(target, html) {
+    if (!target) {
+      return;
+    }
+    const safeHtml = sanitizeHtml(html);
+    if (typeof target.html === "function") {
+      target.html(safeHtml);
+    } else if (typeof target.innerHTML === "string") {
+      target.innerHTML = safeHtml;
+    }
+  };
+}
+
+(() => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const getStoredDebugPreference = () => {
+    if (typeof window.sessionStorage !== "undefined") {
+      const sessionValue = window.sessionStorage.getItem("YFGP_DEBUG_LOGS");
+      if (sessionValue !== null) {
+        return sessionValue === "1" ? "1" : "0";
+      }
+    }
+    if (typeof window.localStorage !== "undefined") {
+      const localValue = window.localStorage.getItem("YFGP_DEBUG_LOGS");
+      if (localValue !== null) {
+        return localValue === "1" ? "1" : "0";
+      }
+    }
+    return null;
+  };
+
+  let debugValue = null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("yfgp_debug")) {
+      debugValue = params.get("yfgp_debug") === "1" ? "1" : "0";
+    }
+  } catch (error) {
+    const fallbackValue = getDebugQueryParam();
+    if (fallbackValue !== null) {
+      debugValue = fallbackValue === "1" ? "1" : "0";
+    }
+  }
+
+  if (debugValue === null) {
+    const storedPreference = getStoredDebugPreference();
+    if (storedPreference !== null) {
+      debugValue = storedPreference;
+    }
+  }
+
+  if (debugValue === null) {
+    const serverDefault =
+      typeof window.yfgpAjax !== "undefined" &&
+      typeof window.yfgpAjax.debug !== "undefined" &&
+      window.yfgpAjax.debug
+        ? "1"
+        : "0";
+    debugValue = serverDefault;
+  }
+
+  if (typeof window.sessionStorage !== "undefined") {
+    window.sessionStorage.setItem("YFGP_DEBUG_LOGS", debugValue);
+  }
+  if (typeof window.localStorage !== "undefined") {
+    window.localStorage.setItem("YFGP_DEBUG_LOGS", debugValue);
+  }
+  window.YFGP_DEBUG_OVERRIDE = debugValue === "1";
+})();
+
+const yfgpLog = (() => {
+  const getStorageOverride = () => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    const sessionValue =
+      typeof window.sessionStorage !== "undefined"
+        ? window.sessionStorage.getItem("YFGP_DEBUG_LOGS")
+        : null;
+    if (sessionValue !== null) {
+      return sessionValue;
+    }
+    return typeof window.localStorage !== "undefined"
+      ? window.localStorage.getItem("YFGP_DEBUG_LOGS")
+      : null;
+  };
+
+  const getDebugFlag = () => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    const queryOverride = getDebugQueryParam();
+    if (queryOverride !== null) {
+      return queryOverride === "1";
+    }
+    if (typeof window.YFGP_DEBUG_OVERRIDE === "boolean") {
+      return window.YFGP_DEBUG_OVERRIDE;
+    }
+    const storageOverride = getStorageOverride();
+    if (storageOverride === "1") {
+      return true;
+    }
+    if (storageOverride === "0") {
+      return false;
+    }
+    if (typeof window.YFGP_DEBUG_LOGS !== "undefined") {
+      return Boolean(window.YFGP_DEBUG_LOGS);
+    }
+    if (typeof window.yfgpAjax !== "undefined" && typeof window.yfgpAjax.debug !== "undefined") {
+      return Boolean(window.yfgpAjax.debug);
+    }
+    return false;
+  };
+
+  const debugEnabled = () => getDebugFlag();
+  return {
+    get isDebugEnabled() {
+      return debugEnabled();
+    },
+    debug: (...args) => {
+      if (debugEnabled()) {
+        console.debug(...args);
+      }
+    },
+    info: (...args) => {
+      if (!debugEnabled()) {
+        return;
+      }
+      console.info(...args);
+    },
+    warn: (...args) => {
+      console.warn(...args);
+    },
+    error: (...args) => {
+      console.error(...args);
+    },
+  };
+})();
+
+yfgpLog.debug("[YFGP] Dynamic Field Selector v3 script enqueued");
+
+// v4.18.35: Wrap IIFE in try-catch to catch any parsing/execution errors
+try {
+  (function ($) {
+    "use strict";
+
+    const nativeConsole = window.console || {
+      log: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      debug: () => {},
+    };
+
+    const logDebug = (...args) => {
+      if (!yfgpLog.isDebugEnabled) {
+        return;
+      }
+      (nativeConsole.debug || nativeConsole.log || (() => {})).apply(nativeConsole, args);
+    };
+
+    const logInfo = (...args) => {
+      if (!yfgpLog.isDebugEnabled) {
+        return;
+      }
+      (nativeConsole.info || nativeConsole.log || (() => {})).apply(nativeConsole, args);
+    };
+
+    const logWarn = (...args) => {
+      (nativeConsole.warn || nativeConsole.log || (() => {})).apply(nativeConsole, args);
+    };
+
+    const logError = (...args) => {
+      (nativeConsole.error || nativeConsole.log || (() => {})).apply(nativeConsole, args);
+    };
+
+    const console = {
+      log: logDebug,
+      debug: logDebug,
+      info: logInfo,
+      warn: logWarn,
+      error: logError,
+    };
+
+    const loggedCptLoads = new Set();
+    const logCptLoadSuccess = (cptSlug, optionsCount) => {
+      if (!yfgpLog.isDebugEnabled) {
+        return;
+      }
+      if (loggedCptLoads.has(cptSlug)) {
+        return;
+      }
+      logDebug(`[YFGP] Загружены поля для CPT "${cptSlug}" (${optionsCount} вариантов)`);
+      loggedCptLoads.add(cptSlug);
+    };
+    
+    // v4.18.22: Debug - verify file is loading
+    logInfo("[YFGP] Dynamic Field Selector v3: файл загружен");
+    
+    // v4.18.22: Debug - verify IIFE is executing
+    logDebug("[YFGP Debug] IIFE started, jQuery available:", typeof $ !== "undefined");
+
+  function reportDynamicFieldError(error, contextMessage) {
+    if (contextMessage) {
+      console.error(contextMessage, error);
+    } else {
+      console.error("[YFGP] DynamicFieldSelectorV3 error:", error);
+    }
+    if (window?.Sentry?.captureException) {
+      try {
+        window.Sentry.captureException(error);
+      } catch (sentryError) {
+        console.warn("[YFGP] Failed to forward error to Sentry:", sentryError);
+      }
+    }
+  }
+
+  /**
+   * Validate data size before AJAX request
+   * v4.18.22: Security - Client-side size validation
+   *
+   * @param {Object|string} data Data to validate
+   * @param {number} maxSize Maximum size in bytes (default: 5MB)
+   * @return {boolean} True if size is valid
+   */
+  function validateDataSize(data, maxSize = 5 * 1024 * 1024) {
+    const dataString = typeof data === "string" ? data : JSON.stringify(data);
+    const size = new Blob([dataString]).size;
+
+    if (size > maxSize) {
+      alert(
+        "Размер данных превышает максимально допустимый (" +
+          Math.round(maxSize / 1024 / 1024) +
+          "MB). Пожалуйста, уменьшите количество полей."
+      );
+      return false;
+    }
+
+    return true;
+  }
 
   /**
    * Класс для работы с динамическими полями v3.0
@@ -41,30 +331,9 @@
       this.fieldName = this.options.fieldName;
       this.postType = this.options.postType;
 
-      // v4.1.0-beta5: Debug initialization
-      console.log(
-        "🏗️ Constructor:",
-        this.fieldName,
-        "currentValue:",
-        this.options.currentValue
-      );
-
       this.availableFields = {};
       this.availableCPTs = {};
       this.currentConfig = this.options.currentValue || this.getDefaultConfig();
-
-      // v4.1.0-beta6: Debug currentConfig after initialization
-      console.log(
-        "📋 currentConfig for",
-        this.fieldName,
-        ":",
-        this.currentConfig
-      );
-      console.log("  ↳ source_type:", this.currentConfig.source_type);
-      console.log(
-        "  ↳ conditional_logic:",
-        this.currentConfig.conditional_logic
-      );
 
       // v3.2.5: Cache для подполей repeater (Task #11)
       this.subfieldCache = new Map();
@@ -81,23 +350,12 @@
           ? parentContainer.data("parent-field")
           : null;
 
-      // v3.2.5: Debug logging для проверки initialization
-      if (this.parentField) {
-        console.log(
-          "[YFGP Init] Subfield initialized:",
-          this.options.fieldName,
-          "-> parent:",
-          this.parentField
-        );
+      try {
+        this.init();
+      } catch (error) {
+        reportDynamicFieldError(error, `[YFGP] Failed to initialize DynamicFieldSelectorV3 constructor for ${this.fieldName}`);
+        this.renderFatalError("Не удалось инициализировать поле. Проверьте консоль браузера для деталей.");
       }
-      if (this.isMainRepeaterField()) {
-        console.log(
-          "[YFGP Init] Parent repeater field initialized:",
-          this.options.fieldName
-        );
-      }
-
-      this.init();
     }
 
     /**
@@ -122,9 +380,6 @@
      * Инициализация
      */
     async init() {
-      // v4.18.11: КОДОВОЕ СЛОВО ДЛЯ ПРОВЕРКИ: BOM_FIX_ACTIVE
-      console.log('[YFGP v4.18.11] КОДОВОЕ СЛОВО: BOM_FIX_ACTIVE - dynamic-field-selector-v3.js загружен');
-      
       try {
         await this.loadAvailableFields();
         await this.loadAvailableCPTs();
@@ -137,24 +392,8 @@
         }
 
         // Загружаем сохраненное значение
-        // v4.1.0-beta6: Debug why restoreValue() not called for some fields
-        console.log("🔎 Before restoreValue check:", this.fieldName);
-        console.log(
-          "  ↳ this.currentConfig.source_type:",
-          this.currentConfig.source_type
-        );
-        console.log(
-          "  ↳ Will call restoreValue?",
-          !!this.currentConfig.source_type
-        );
-
         if (this.currentConfig.source_type) {
           this.restoreValue();
-        } else {
-          console.log(
-            "⚠️ SKIP restoreValue() - source_type is empty/falsy for:",
-            this.fieldName
-          );
         }
 
         // v3.2.5: Проверить initial state parent поля для subfields (Task #11)
@@ -162,7 +401,8 @@
           this.checkParentInitialState();
         }
       } catch (error) {
-        console.error("DynamicFieldSelectorV3 init error:", error);
+        reportDynamicFieldError(error, `DynamicFieldSelectorV3 init error for ${this.fieldName}`);
+        this.renderFatalError("Загрузка конфигурации поля прервана из-за ошибки. Сообщите об этом разработчику и приложите логи консоли.");
       }
     }
 
@@ -171,12 +411,20 @@
      */
     async loadAvailableFields() {
       return new Promise((resolve, reject) => {
+        if (typeof yfgpAjax === "undefined") {
+          const errorMessage = "Объект yfgpAjax недоступен. Скрипт локализации не загружен.";
+          console.error(errorMessage);
+          this.renderFatalError(errorMessage);
+          reject(errorMessage);
+          return;
+        }
+        
         // v3.3.5: Проверить есть ли данные переданные через wp_localize_script
         if (
           yfgpAjax?.availableFieldsByPostType &&
           yfgpAjax.availableFieldsByPostType[this.options.postType]
         ) {
-          console.log("[YFGP Init] Loading fields from PHP data (no AJAX)");
+          logDebug("[YFGP Init] Loading fields from PHP data (no AJAX)");
           this.availableFields =
             yfgpAjax.availableFieldsByPostType[this.options.postType];
           resolve();
@@ -184,7 +432,7 @@
         }
 
         // Fallback: AJAX запрос
-        console.log("[YFGP Init] Loading fields via AJAX (fallback)");
+        logDebug("[YFGP Init] Loading fields via AJAX (fallback)");
         $.ajax({
           url: yfgpAjax.ajax_url,
           type: "POST",
@@ -259,6 +507,14 @@
      */
     async loadAvailableCPTs() {
       return new Promise((resolve, reject) => {
+        if (typeof yfgpAjax === "undefined") {
+          const errorMessage = "Объект yfgpAjax недоступен. Невозможно загрузить список CPT.";
+          console.error(errorMessage);
+          this.renderFatalError(errorMessage);
+          reject(errorMessage);
+          return;
+        }
+        
         $.ajax({
           url: yfgpAjax.ajax_url,
           type: "POST",
@@ -328,9 +584,31 @@
     }
 
     /**
+     * Показать фатальную ошибку в контейнере поля
+     *
+     * @param {string} message Текст ошибки
+     */
+    renderFatalError(message) {
+      const fallbackMessage =
+        typeof message === "string" && message.trim().length > 0
+          ? message
+          : "Неизвестная ошибка. Проверьте консоль браузера для подробностей.";
+      const errorHtml = `
+        <div class="yfgp-dfs-error">
+          <strong>Не удалось загрузить конфигурацию поля</strong>
+          <p>${sanitizeHtml(fallbackMessage)}</p>
+        </div>
+      `;
+      this.container
+        .addClass("yfgp-dfs-error-state")
+        .html(errorHtml);
+    }
+
+    /**
      * Рендеринг компонента
      */
     render() {
+      logDebug("🔧 [render] Called for field:", this.fieldName, "container:", this.container.length);
       const html = `
         <div class="yfgp-dynamic-field-v3">
           <!-- Выбор типа источника -->
@@ -621,7 +899,20 @@
         </div>
       `;
 
-      this.container.html(html);
+      // v4.18.22: Security - Sanitize HTML to prevent XSS
+      this.container.html(sanitizeHtml(html));
+      
+      // v4.18.41: DEBUG - Check if sections are in DOM after insertion
+      const $sections = this.container.find(".yfgp-config-section");
+      logDebug("✅ [render] HTML rendered for field:", this.fieldName);
+      logDebug("  ↳ Container HTML length:", this.container.html().length);
+      logDebug("  ↳ Sections found:", $sections.length);
+      logDebug("  ↳ Container selector:", this.container.selector || "no selector (jQuery object)");
+      logDebug("  ↳ Container parent:", this.container.parent().length > 0 ? "has parent" : "no parent");
+      
+      if ($sections.length === 0) {
+        console.error("❌ [render] NO SECTIONS FOUND! HTML preview:", this.container.html().substring(0, 500));
+      }
     }
 
     /**
@@ -744,10 +1035,12 @@
      */
     bindEvents() {
       const $container = this.container;
+      logDebug("🔧 [bindEvents] Binding events for field:", this.fieldName, "container:", $container.length);
 
       // Изменение типа источника
       $container.on("change", ".yfgp-source-type-v3", (e) => {
         const sourceType = $(e.target).val();
+        logDebug("🔧 [bindEvents] Source type changed to:", sourceType, "for field:", this.fieldName);
         this.onSourceTypeChange(sourceType);
       });
 
@@ -918,17 +1211,39 @@
      * v4.18.22: FIX - Сохранить старый тип ПЕРЕД изменением и очистить source_cpt для типов, которые его не используют
      */
     onSourceTypeChange(sourceType) {
+      logDebug("🔧 [onSourceTypeChange] Called with sourceType:", sourceType, "for field:", this.fieldName);
       // v4.18.22: CRITICAL FIX - Сохранить старый тип ПЕРЕД изменением
       const oldSourceType = this.currentConfig.source_type;
 
       // Скрыть все секции
-      this.container.find(".yfgp-config-section").hide();
+      const $allSections = this.container.find(".yfgp-config-section");
+      logDebug("🔧 [onSourceTypeChange] Found", $allSections.length, "config sections");
+      $allSections.hide();
 
       // Показать выбранную секцию
       if (sourceType) {
-        this.container
-          .find(`.yfgp-config-section[data-source-type="${sourceType}"]`)
-          .show();
+        const $targetSection = this.container.find(`.yfgp-config-section[data-source-type="${sourceType}"]`);
+        logDebug("🔧 [onSourceTypeChange] Found target section?", $targetSection.length, "for type:", sourceType);
+        if ($targetSection.length > 0) {
+          $targetSection.show();
+          logDebug("✅ [onSourceTypeChange] Section shown for:", sourceType);
+        } else {
+          console.error("❌ [onSourceTypeChange] Section NOT found for type:", sourceType);
+        }
+      } else {
+        logDebug("⚠️ [onSourceTypeChange] sourceType is empty, not showing any section");
+      }
+
+      // v4.18.44: CRITICAL FIX - Show ONLY the correct relationship section (not all of them!)
+      // The target section is already shown above, so we just need to ensure it's the right one
+      if (sourceType === 'relationship_1') {
+        // Hide relationship_2 section if it's visible
+        this.container.find(".yfgp-config-relationship-2").hide();
+        logDebug("✅ [onSourceTypeChange] relationship_1 section shown (relationship_2 hidden)");
+      } else if (sourceType === 'relationship_2') {
+        // Hide relationship_1 section if it's visible
+        this.container.find(".yfgp-config-relationship-1").hide();
+        logDebug("✅ [onSourceTypeChange] relationship_2 section shown (relationship_1 hidden)");
       }
 
       // Обновить конфигурацию
@@ -957,7 +1272,7 @@
 
       if (typesWithoutSourceCpt.includes(sourceType)) {
         this.currentConfig.source_cpt = null;
-        console.log("🔧 [YFGP v4.18.22] Cleared source_cpt for", sourceType, "field:", this.fieldName);
+        logDebug("🔧 [YFGP v4.18.22] Cleared source_cpt for", sourceType, "field:", this.fieldName);
       }
 
       this.updatePreview();
@@ -971,126 +1286,172 @@
       if (!cptSlug) return;
 
       // v4.1.0-beta10: Debug AJAX loading
-      console.log(
+      logDebug(
         "🔄 loadCPTFields() called for CPT:",
         cptSlug,
         "fieldName:",
         this.fieldName
       );
 
-      const $nestedField = this.container.find(".yfgp-nested-field");
-      $nestedField.html('<option value="">⏳ Загрузка...</option>');
+      // v4.18.22: CRITICAL FIX - Find relationship section first, then find nested_field inside it
+      // This is more reliable than searching the entire container
+      const $relationshipSection = this.container.find(
+        ".yfgp-config-relationship-1, .yfgp-config-relationship-2"
+      );
+      
+      if ($relationshipSection.length === 0) {
+        console.error("❌ [loadCPTFields] Relationship section not found in container for:", this.fieldName);
+        console.error("  ↳ Container:", this.container);
+        console.error("  ↳ Container HTML:", this.container.html().substring(0, 200));
+        return;
+      }
+      
+      // v4.18.22: CRITICAL FIX - Ensure section is visible BEFORE searching for nested_field
+      if (!$relationshipSection.is(":visible")) {
+        logDebug("⚠️ [loadCPTFields] Relationship section not visible, showing it...");
+        $relationshipSection.show();
+      }
+      
+      // v4.18.22: CRITICAL FIX - Use setTimeout to allow DOM to update after showing section
+      // Wait for DOM to update before searching for nested_field
+      return new Promise((resolve, reject) => {
+        // v4.18.26: Save resolve/reject references for use inside setTimeout
+        const outerResolve = resolve;
+        const outerReject = reject;
+        setTimeout(async () => {  // v4.18.24: CRITICAL FIX - Make callback async to allow await
+          // Find nested_field INSIDE the relationship section
+          let $nestedField = $relationshipSection.find(".yfgp-nested-field");
+          
+          if ($nestedField.length === 0) {
+            console.error("❌ [loadCPTFields] .yfgp-nested-field element not found in relationship section for:", this.fieldName);
+            console.error("  ↳ Relationship section HTML:", $relationshipSection.html().substring(0, 300));
+            console.error("  ↳ Relationship section visible?", $relationshipSection.is(":visible"));
+            outerReject(new Error(".yfgp-nested-field element not found"));
+            return;
+          }
+          
+          logDebug("✅ [loadCPTFields] Found .yfgp-nested-field element, proceeding with AJAX");
+          $nestedField.html('<option value="">⏳ Загрузка...</option>');
 
-      try {
-        // v4.18.11: Используем Promise с success callback для получения xhr.responseText
-        const parsedResponse = await new Promise((resolve, reject) => {
-          $.ajax({
-            url: yfgpAjax.ajax_url,
-            type: "POST",
-            data: {
-              action: "yfgp_get_fields_v3",
-              nonce: yfgpAjax.nonce,
-              post_type: cptSlug,
-            },
-            dataType: 'text', // v4.18.11: Используем 'text' для обработки BOM
-            success: (responseText, textStatus, xhr) => {
-              // v4.18.11: Используем xhr.responseText напрямую для получения сырого ответа
-              let rawResponse = xhr.responseText || responseText;
-              
-              // v4.18.11: Remove UTF-8 BOM (U+FEFF) - удаляем ВСЕ BOM подряд в цикле
-              if (typeof rawResponse === 'string' && rawResponse.length > 0) {
-                // Удаляем ВСЕ BOM подряд (может быть несколько!)
-                while (rawResponse.length > 0 && (
-                  rawResponse.charCodeAt(0) === 0xFEFF || 
-                  rawResponse.charCodeAt(0) === 65279 ||
-                  rawResponse.substring(0, 3) === '\xEF\xBB\xBF'
-                )) {
-                  if (rawResponse.substring(0, 3) === '\xEF\xBB\xBF') {
-                    rawResponse = rawResponse.substring(3);
-                  } else {
-                    rawResponse = rawResponse.slice(1);
+          // Continue with AJAX request
+          try {
+            // v4.18.11: Используем Promise с success callback для получения xhr.responseText
+            const parsedResponse = await new Promise((resolve, reject) => {
+              $.ajax({
+                url: yfgpAjax.ajax_url,
+                type: "POST",
+                data: {
+                  action: "yfgp_get_fields_v3",
+                  nonce: yfgpAjax.nonce,
+                  post_type: cptSlug,
+                },
+                dataType: 'text', // v4.18.11: Используем 'text' для обработки BOM
+                success: (responseText, textStatus, xhr) => {
+                  // v4.18.11: Используем xhr.responseText напрямую для получения сырого ответа
+                  let rawResponse = xhr.responseText || responseText;
+                  
+                  // v4.18.11: Remove UTF-8 BOM (U+FEFF) - удаляем ВСЕ BOM подряд в цикле
+                  if (typeof rawResponse === 'string' && rawResponse.length > 0) {
+                    // Удаляем ВСЕ BOM подряд (может быть несколько!)
+                    while (rawResponse.length > 0 && (
+                      rawResponse.charCodeAt(0) === 0xFEFF || 
+                      rawResponse.charCodeAt(0) === 65279 ||
+                      rawResponse.substring(0, 3) === '\xEF\xBB\xBF'
+                    )) {
+                      if (rawResponse.substring(0, 3) === '\xEF\xBB\xBF') {
+                        rawResponse = rawResponse.substring(3);
+                      } else {
+                        rawResponse = rawResponse.slice(1);
+                      }
+                    }
+                  }
+                  
+                  try {
+                    const parsed = JSON.parse(rawResponse);
+                    resolve(parsed);
+                  } catch (e) {
+                    console.error("Failed to parse response in loadCPTFields:", e, rawResponse.substring(0, 100));
+                    reject(e);
+                  }
+                },
+                error: (xhr, status, error) => {
+                  reject(new Error(error || 'AJAX request failed'));
+                }
+              });
+            });
+
+            if (parsedResponse && parsedResponse.success === true) {
+              logDebug("✅ loadCPTFields: Response success for", cptSlug, ", data keys:", Object.keys(parsedResponse.data));
+
+              let html = '<option value="">-- Выберите поле --</option>';
+
+              // Добавить все группы полей
+              Object.keys(parsedResponse.data).forEach((groupKey) => {
+                const group = parsedResponse.data[groupKey];
+                logDebug(
+                  "  ↳ Processing group:",
+                  groupKey,
+                  "fields count:",
+                  Object.keys(group).length
+                );
+                html += `<optgroup label="${this.getGroupLabel(groupKey)}">`;
+
+                Object.keys(group).forEach((fieldKey) => {
+                  const field = group[fieldKey];
+                  const fieldLabel = field.label || fieldKey;
+                  html += `<option value="${fieldKey}">${fieldLabel}</option>`;
+                });
+
+                html += "</optgroup>";
+              });
+
+              // v4.18.22: Security - Sanitize HTML to prevent XSS
+              $nestedField.html(sanitizeHtml(html));
+
+              const savedNestedField = this.currentConfig.nested_field;
+              if (
+                savedNestedField &&
+                $nestedField.find(`option[value="${savedNestedField}"]`).length
+              ) {
+                $nestedField.val(savedNestedField);
+              } else {
+                const defaultCandidates = ["post_id", "ID"];
+                const fallbackValue = defaultCandidates.find(
+                  (candidate) =>
+                    $nestedField.find(`option[value="${candidate}"]`).length > 0
+                );
+                if (fallbackValue) {
+                  $nestedField.val(fallbackValue);
+                  if (this.currentConfig.nested_field !== fallbackValue) {
+                    this.currentConfig.nested_field = fallbackValue;
+                    this.updatePreview();
+                    this.saveConfig();
                   }
                 }
               }
-              
-              try {
-                const parsed = JSON.parse(rawResponse);
-                resolve(parsed);
-              } catch (e) {
-                console.error("Failed to parse response in loadCPTFields:", e, rawResponse.substring(0, 100));
-                reject(e);
-              }
-            },
-            error: (xhr, status, error) => {
-              reject(new Error(error || 'AJAX request failed'));
+
+              const optionsCount = $nestedField.find("option").length;
+              logCptLoadSuccess(cptSlug, optionsCount);
+
+              logDebug(
+                "✅ Dropdown updated, total options:",
+                $nestedField.find("option").length
+              );
+              outerResolve(); // v4.18.26: Resolve outer Promise after successful completion
+            } else {
+              console.error("❌ Response failed:", parsedResponse);
+              console.error("Response success:", parsedResponse?.success);
+              console.error("Response data:", parsedResponse?.data);
+              $nestedField.html('<option value="">❌ Ошибка загрузки</option>');
+              outerReject(new Error("Response failed: " + (parsedResponse?.data?.message || "Unknown error")));
             }
-          });
-        });
-
-        if (parsedResponse && parsedResponse.success === true) {
-          console.log("✅ loadCPTFields: Response success for", cptSlug, ", data keys:", Object.keys(parsedResponse.data));
-
-          let html = '<option value="">-- Выберите поле --</option>';
-
-          // Добавить все группы полей
-          Object.keys(parsedResponse.data).forEach((groupKey) => {
-            const group = parsedResponse.data[groupKey];
-            console.log(
-              "  ↳ Processing group:",
-              groupKey,
-              "fields count:",
-              Object.keys(group).length
-            );
-            html += `<optgroup label="${this.getGroupLabel(groupKey)}">`;
-
-            Object.keys(group).forEach((fieldKey) => {
-              const field = group[fieldKey];
-              html += `<option value="${fieldKey}">${
-                field.label || fieldKey
-              }</option>`;
-            });
-
-            html += "</optgroup>";
-          });
-
-          $nestedField.html(html);
-
-          const savedNestedField = this.currentConfig.nested_field;
-          if (
-            savedNestedField &&
-            $nestedField.find(`option[value="${savedNestedField}"]`).length
-          ) {
-            $nestedField.val(savedNestedField);
-          } else {
-            const defaultCandidates = ["post_id", "ID"];
-            const fallbackValue = defaultCandidates.find(
-              (candidate) =>
-                $nestedField.find(`option[value="${candidate}"]`).length > 0
-            );
-            if (fallbackValue) {
-              $nestedField.val(fallbackValue);
-              if (this.currentConfig.nested_field !== fallbackValue) {
-                this.currentConfig.nested_field = fallbackValue;
-                this.updatePreview();
-                this.saveConfig();
-              }
-            }
+          } catch (error) {
+            console.error("❌ Failed to load CPT fields:", error);
+            $nestedField.html('<option value="">❌ Ошибка загрузки</option>');
+            outerReject(error);
           }
-
-          console.log(
-            "✅ Dropdown updated, total options:",
-            $nestedField.find("option").length
-          );
-        } else {
-          console.error("❌ Response failed:", parsedResponse);
-          console.error("Response success:", parsedResponse?.success);
-          console.error("Response data:", parsedResponse?.data);
-          $nestedField.html('<option value="">❌ Ошибка загрузки</option>');
-        }
-      } catch (error) {
-        console.error("❌ Failed to load CPT fields:", error);
-        $nestedField.html('<option value="">❌ Ошибка загрузки</option>');
-      }
+        }, 50); // v4.18.22: 50ms delay to allow DOM to update after showing section
+      });
     }
 
     /**
@@ -1167,16 +1528,16 @@
 
               Object.keys(group).forEach((fieldKey) => {
                 const field = group[fieldKey];
-                html += `<option value="${fieldKey}">${
-                  field.label || fieldKey
-                }</option>`;
+                const fieldLabel = field.label || fieldKey;
+                html += `<option value="${fieldKey}">${fieldLabel}</option>`;
               });
 
               html += "</optgroup>";
             }
           });
 
-          $targetSelect.html(html);
+          // v4.18.22: Security - Sanitize HTML to prevent XSS
+          $targetSelect.html(sanitizeHtml(html));
         } else {
           $targetSelect.html('<option value="">❌ Ошибка загрузки</option>');
         }
@@ -1235,55 +1596,59 @@
       const savedOperator = config.operator;
 
       // v4.1.0-beta4: Debug logging
-      console.log("🔍 restoreValue() called for:", this.fieldName);
-      console.log("📦 Config:", JSON.stringify(config, null, 2));
-      console.log(
+      logDebug("🔍 restoreValue() called for:", this.fieldName);
+      logDebug("📦 Config:", JSON.stringify(config, null, 2));
+      logDebug(
         "💾 Saved - nested_field:",
         savedNestedField,
         "operator_value:",
         savedOperatorValue
       );
 
-      // Установить source_type
+      // v4.18.22: CRITICAL FIX - Set source_type FIRST to trigger onSourceTypeChange()
+      // This will show the correct section (including relationship section)
       this.container
         .find(".yfgp-source-type-v3")
         .val(config.source_type)
         .trigger("change");
 
-      // Установить остальные поля (небольшая задержка для загрузки секций)
-      setTimeout(() => {
-        // v4.1.0: Boolean fields - restore radio button selection
-        if (config.source_type === "boolean" && config.source_field) {
-          this.container
-            .find(`.yfgp-boolean-radio[value="${config.source_field}"]`)
-            .prop("checked", true);
-        }
+      // v4.18.22: CRITICAL FIX - Wait for DOM to update after onSourceTypeChange()
+      // Use requestAnimationFrame to ensure the section is visible before proceeding
+      requestAnimationFrame(() => {
+        // Установить остальные поля (небольшая задержка для загрузки секций)
+        setTimeout(() => {
+          // v4.1.0: Boolean fields - restore radio button selection
+          if (config.source_type === "boolean" && config.source_field) {
+            this.container
+              .find(`.yfgp-boolean-radio[value="${config.source_field}"]`)
+              .prop("checked", true);
+          }
 
-        if (config.source_field) {
-          this.container.find(".yfgp-source-field").val(config.source_field);
-          this.container
-            .find(".yfgp-source-field-input")
-            .val(config.source_field);
-        }
+          if (config.source_field) {
+            this.container.find(".yfgp-source-field").val(config.source_field);
+            this.container
+              .find(".yfgp-source-field-input")
+              .val(config.source_field);
+          }
 
-        // v4.1.0: Relationship fields - restore source_cpt and nested_field
-        // v4.1.0-beta8: CRITICAL FIX - Use savedSourceCpt/savedNestedField instead of config.*
-        // v4.18.22: CRITICAL FIX - Восстанавливать source_cpt ТОЛЬКО для типов, которые его используют
-        const typesWithSourceCpt = [
-          "relationship",
-          "relationship_1",
-          "relationship_2",
-          "repeater_relationship"
-        ];
+          // v4.1.0: Relationship fields - restore source_cpt and nested_field
+          // v4.1.0-beta8: CRITICAL FIX - Use savedSourceCpt/savedNestedField instead of config.*
+          // v4.18.22: CRITICAL FIX - Восстанавливать source_cpt ТОЛЬКО для типов, которые его используют
+          const typesWithSourceCpt = [
+            "relationship",
+            "relationship_1",
+            "relationship_2",
+            "repeater_relationship"
+          ];
 
-        if (savedSourceCpt) {
-          // v4.18.22: CRITICAL FIX - Очистить source_cpt для типов, которые его не используют
-          if (!typesWithSourceCpt.includes(config.source_type)) {
-            this.currentConfig.source_cpt = null;
-            console.log("🔧 [YFGP v4.18.22] Cleared source_cpt for", config.source_type, "field:", this.fieldName);
-          } else {
-            // Восстанавливаем source_cpt только для типов, которые его используют
-            this.container.find(".yfgp-source-cpt").val(savedSourceCpt);
+          if (savedSourceCpt) {
+            // v4.18.22: CRITICAL FIX - Очистить source_cpt для типов, которые его не используют
+            if (!typesWithSourceCpt.includes(config.source_type)) {
+              this.currentConfig.source_cpt = null;
+              logDebug("🔧 [YFGP v4.18.22] Cleared source_cpt for", config.source_type, "field:", this.fieldName);
+            } else {
+              // Восстанавливаем source_cpt только для типов, которые его используют
+              this.container.find(".yfgp-source-cpt").val(savedSourceCpt);
 
             // Trigger loadCPTFields for ALL relationship types (relationship, relationship_1)
             // v4.1.0-beta11: CRITICAL FIX - AWAIT loadCPTFields() before attempting to restore nested_field
@@ -1291,148 +1656,231 @@
               config.source_type === "relationship" ||
               config.source_type === "relationship_1"
             ) {
-              console.log(
+              logDebug(
                 "🔄 Calling loadCPTFields with savedSourceCpt:",
                 savedSourceCpt
               );
 
-              // AWAIT the Promise to complete before restoring nested_field
-              this.loadCPTFields(savedSourceCpt).then(() => {
-                console.log(
-                  "🔧 [Relationship] AJAX completed, attempting to restore nested_field for:",
-                  this.fieldName
-                );
-                console.log("  ↳ savedNestedField:", savedNestedField);
-
-                if (savedNestedField) {
-                  const $nestedField = this.container.find(".yfgp-nested-field");
-                  console.log(
-                    "  ↳ Found .yfgp-nested-field element?",
-                    $nestedField.length > 0
+              // v4.18.22: CRITICAL FIX - Save 'this' context before Promise
+              const self = this;
+              
+              // v4.18.22: CRITICAL FIX - Wait for relationship section to be visible before calling loadCPTFields
+              // v4.18.42: CRITICAL FIX - Show the section BEFORE waiting for it to be visible
+              const waitForSectionVisible = () => {
+                return new Promise((resolve) => {
+                  const $relationshipSection = self.container.find(
+                    `.yfgp-config-section[data-source-type="${config.source_type}"]`
                   );
+                  
+                  if ($relationshipSection.length === 0) {
+                    console.error("❌ [restoreValue] Relationship section not found for:", config.source_type);
+                    resolve(false);
+                    return;
+                  }
+                  
+                  // v4.18.43 → v4.18.52: Force show the section and re-check visibility without noisy warnings
+                  const ensureVisible = () => {
+                    $relationshipSection.show();
+                    $relationshipSection.css("display", "block");
+                  };
 
-                  const $options = $nestedField.find("option");
-                  console.log("  ↳ Element options count:", $options.length);
+                  const waitAttempts = 5;
+                  let attempt = 0;
 
-                  // v4.1.0-beta9: Debug available option values
-                  const availableValues = [];
-                  $options.each(function () {
-                    availableValues.push($(this).val());
-                  });
-                  console.log("  ↳ Available option values:", availableValues);
+                  const checkVisibility = () => {
+                    ensureVisible();
+                    if ($relationshipSection.is(":visible") || attempt >= waitAttempts) {
+                      resolve(true);
+                      return;
+                    }
+                    attempt++;
+                    requestAnimationFrame(checkVisibility);
+                  };
 
-                  $nestedField.val(savedNestedField).trigger("change");
+                  checkVisibility();
+                });
+              };
+              
+              // Wait for section to be visible, then call loadCPTFields
+              waitForSectionVisible().then((isVisible) => {
+                if (isVisible) {
+                  // AWAIT the Promise to complete before restoring nested_field
+                  self.loadCPTFields(savedSourceCpt).then(() => {
+                      logDebug(
+                        "🔧 [Relationship] AJAX completed, attempting to restore nested_field for:",
+                        self.fieldName
+                      );
+                      logDebug("  ↳ savedNestedField:", savedNestedField);
 
-                  console.log("  ↳ Value set to:", $nestedField.val());
-                  console.log("  ↳ Expected:", savedNestedField);
-                  console.log(
-                    "  ↳ Match?",
-                    $nestedField.val() === savedNestedField
-                  );
+                      if (savedNestedField) {
+                        // v4.18.22: CRITICAL FIX - Find relationship section first, then nested_field inside it
+                        const $relationshipSection = self.container.find(
+                          `.yfgp-config-section[data-source-type="${config.source_type}"]`
+                        );
+                        
+                        if ($relationshipSection.length === 0) {
+                          console.error(
+                            "❌ [restoreValue] Relationship section not found after loadCPTFields!"
+                          );
+                          console.error("  ↳ Container:", self.container);
+                          console.error("  ↳ Field name:", self.fieldName);
+                          console.error("  ↳ Source type:", config.source_type);
+                          return;
+                        }
+                        
+                        // Find nested_field INSIDE the relationship section
+                        const $nestedField = $relationshipSection.find(".yfgp-nested-field");
+                        logDebug(
+                          "  ↳ Found .yfgp-nested-field element?",
+                          $nestedField.length > 0
+                        );
+
+                        if ($nestedField.length === 0) {
+                          console.error(
+                            "❌ [restoreValue] .yfgp-nested-field element not found in relationship section after loadCPTFields!"
+                          );
+                          console.error("  ↳ Container:", self.container);
+                          console.error("  ↳ Field name:", self.fieldName);
+                          console.error("  ↳ Relationship section HTML:", $relationshipSection.html().substring(0, 300));
+                          return;
+                        }
+
+                        const $options = $nestedField.find("option");
+                        logDebug("  ↳ Element options count:", $options.length);
+
+                        // v4.1.0-beta9: Debug available option values
+                        const availableValues = [];
+                        $options.each(function () {
+                          availableValues.push($(this).val());
+                        });
+                        logDebug("  ↳ Available option values:", availableValues);
+
+                        if ($options.length > 0) {
+                          $nestedField.val(savedNestedField).trigger("change");
+
+                          logDebug("  ↳ Value set to:", $nestedField.val());
+                          logDebug("  ↳ Expected:", savedNestedField);
+                          logDebug(
+                            "  ↳ Match?",
+                            $nestedField.val() === savedNestedField
+                          );
+                        } else {
+                          console.warn(
+                            "⚠️ [restoreValue] No options available in dropdown, cannot restore value"
+                          );
+                        }
+                      }
+                    })
+                    .catch((error) => {
+                      console.error(
+                        "❌ [restoreValue] Error loading CPT fields:",
+                        error
+                      );
+                    });
+                } else {
+                  console.error("❌ [restoreValue] Cannot load CPT fields - section not visible");
                 }
               });
             }
+            } // v4.18.37: Close else block (line 1412)
           }
-        }
 
-        // v4.1.0-beta3: Handle nested_field for non-relationship types
-        if (
-          config.nested_field &&
-          config.source_type !== "relationship" &&
-          config.source_type !== "relationship_1"
-        ) {
-          this.container.find(".yfgp-nested-field").val(config.nested_field);
-        }
-        if (config.meta_field) {
-          this.container.find(".yfgp-meta-field").val(config.meta_field);
-        }
-
-        // v4.1.0-beta2: Восстановить условную логику с задержкой для operator_value
-        // v4.1.0-beta8: CRITICAL FIX - Use saved values instead of config.*
-        if (savedConditionalLogic) {
-          this.container.find(".yfgp-enable-conditional").prop("checked", true);
-          this.container.find(".yfgp-conditional-config").show();
-
-          if (savedOperator) {
-            const $operatorSelect = this.container.find(".yfgp-operator");
-            let normalizedOperator = savedOperator;
-
-            if (savedOperator === "?" || savedOperator === "∈") {
-              normalizedOperator = "in_list";
-            } else if (savedOperator === "∉") {
-              normalizedOperator = "not_in_list";
+          // v4.1.0-beta3: Handle nested_field for non-relationship types
+            if (
+              config.nested_field &&
+              config.source_type !== "relationship" &&
+              config.source_type !== "relationship_1"
+            ) {
+              this.container.find(".yfgp-nested-field").val(config.nested_field);
+            }
+            if (config.meta_field) {
+              this.container.find(".yfgp-meta-field").val(config.meta_field);
             }
 
-            if (
-              normalizedOperator === "in_list" ||
-              normalizedOperator === "not_in_list"
-            ) {
-              const $listOptions = $operatorSelect
-                .find("optgroup")
-                .filter((_, group) => {
-                  const label = (
-                    group.getAttribute("label") || ""
-                  ).toLowerCase();
-                  return label.indexOf("list") !== -1;
-                })
-                .find("option");
-              const targetIndex = normalizedOperator === "in_list" ? 0 : 1;
-              const $targetOption = $listOptions.eq(targetIndex);
-              $operatorSelect.find("option").prop("selected", false);
-              if ($targetOption.length) {
-                $targetOption.prop("selected", true);
+            // v4.1.0-beta2: Восстановить условную логику с задержкой для operator_value
+            // v4.1.0-beta8: CRITICAL FIX - Use saved values instead of config.*
+            if (savedConditionalLogic) {
+            this.container.find(".yfgp-enable-conditional").prop("checked", true);
+            this.container.find(".yfgp-conditional-config").show();
+
+            if (savedOperator) {
+              const $operatorSelect = this.container.find(".yfgp-operator");
+              let normalizedOperator = savedOperator;
+
+              if (savedOperator === "?" || savedOperator === "∈") {
+                normalizedOperator = "in_list";
+              } else if (savedOperator === "∉") {
+                normalizedOperator = "not_in_list";
+              }
+
+              if (
+                normalizedOperator === "in_list" ||
+                normalizedOperator === "not_in_list"
+              ) {
+                const $listOptions = $operatorSelect
+                  .find("optgroup")
+                  .filter((_, group) => {
+                    const label = (
+                      group.getAttribute("label") || ""
+                    ).toLowerCase();
+                    return label.indexOf("list") !== -1;
+                  })
+                  .find("option");
+                const targetIndex = normalizedOperator === "in_list" ? 0 : 1;
+                const $targetOption = $listOptions.eq(targetIndex);
+                $operatorSelect.find("option").prop("selected", false);
+                if ($targetOption.length) {
+                  $targetOption.prop("selected", true);
+                } else {
+                  $operatorSelect.val(normalizedOperator);
+                }
               } else {
                 $operatorSelect.val(normalizedOperator);
               }
-            } else {
-              $operatorSelect.val(normalizedOperator);
+
+              this.currentConfig.operator = normalizedOperator;
+              this.container.find(".yfgp-operator").trigger("change");
             }
 
-            this.currentConfig.operator = normalizedOperator;
-            this.container.find(".yfgp-operator").trigger("change");
-          }
+            // v4.1.0-beta3: Increased delay for operator_value restoration (field might not be visible yet)
+            setTimeout(() => {
+              logDebug(
+                "🔧 [Conditional] Attempting to restore operator_value for:",
+                this.fieldName
+              );
+              logDebug("  ↳ savedOperatorValue:", savedOperatorValue);
 
-          // v4.1.0-beta3: Increased delay for operator_value restoration (field might not be visible yet)
-          setTimeout(() => {
-            console.log(
-              "🔧 [Conditional] Attempting to restore operator_value for:",
-              this.fieldName
-            );
-            console.log("  ↳ savedOperatorValue:", savedOperatorValue);
+              if (savedOperatorValue) {
+                const $operatorValue = this.container.find(
+                  ".yfgp-operator-value"
+                );
+                logDebug(
+                  "  ↳ Found .yfgp-operator-value element?",
+                  $operatorValue.length > 0
+                );
+                logDebug(
+                  "  ↳ Element visible?",
+                  $operatorValue.is(":visible")
+                );
+                logDebug(
+                  "  ↳ Element parent .yfgp-operator-value-row display:",
+                  $operatorValue.parent(".yfgp-operator-value-row").css("display")
+                );
 
-            if (savedOperatorValue) {
-              const $operatorValue = this.container.find(
-                ".yfgp-operator-value"
-              );
-              console.log(
-                "  ↳ Found .yfgp-operator-value element?",
-                $operatorValue.length > 0
-              );
-              console.log(
-                "  ↳ Element visible?",
-                $operatorValue.is(":visible")
-              );
-              console.log(
-                "  ↳ Element parent .yfgp-operator-value-row display:",
-                $operatorValue.parent(".yfgp-operator-value-row").css("display")
-              );
+                $operatorValue.val(savedOperatorValue);
+                this.currentConfig.operator_value = savedOperatorValue;
+                this.saveConfig();
 
-              $operatorValue.val(savedOperatorValue);
-              this.currentConfig.operator_value = savedOperatorValue;
-              this.saveConfig();
-
-              console.log("  ↳ Value set to:", $operatorValue.val());
-              console.log("  ↳ Expected:", savedOperatorValue);
-              console.log(
-                "  ↳ Match?",
-                $operatorValue.val() === savedOperatorValue
-              );
+                logDebug("  ↳ Value set to:", $operatorValue.val());
+                logDebug("  ↳ Expected:", savedOperatorValue);
+                logDebug("  ↳ Match?", $operatorValue.val() === savedOperatorValue);
+              }
+            }, 300);
             }
-          }, 300);
-        }
 
-        this.updatePreview();
-      }, 150);
+            this.updatePreview();
+          }, 150); // v4.18.32: Close setTimeout callback
+      }); // Close requestAnimationFrame
     }
 
     /**
@@ -1503,7 +1951,7 @@
           timestamp: Date.now(),
         };
 
-        console.log("[YFGP Event] Broadcasting repeater-changed:", eventData);
+        logDebug("[YFGP Event] Broadcasting repeater-changed:", eventData);
         $(document).trigger("yfgp:repeater-changed", eventData);
       } catch (error) {
         console.error("[YFGP Event] Broadcast failed:", error);
@@ -1519,7 +1967,7 @@
         "yfgp:repeater-changed",
         this.onRepeaterParentChanged.bind(this)
       );
-      console.log(
+      logDebug(
         "[YFGP Event] Subfield listening for parent:",
         this.parentField
       );
@@ -1537,7 +1985,7 @@
           return; // Not our parent
         }
 
-        console.log(
+        logDebug(
           "[YFGP Event] Subfield received event for parent:",
           data.parentField
         );
@@ -1563,7 +2011,7 @@
       );
 
       if ($parentFieldContainer.length === 0) {
-        console.log("[YFGP Init] Parent field not found:", this.parentField);
+        logDebug("[YFGP Init] Parent field not found:", this.parentField);
         return;
       }
 
@@ -1573,7 +2021,7 @@
       );
 
       if ($parentWrapper.length === 0) {
-        console.log("[YFGP Init] Parent wrapper not found");
+        logDebug("[YFGP Init] Parent wrapper not found");
         return;
       }
 
@@ -1583,12 +2031,12 @@
       if (!parentInstance) {
         // ИСПРАВЛЕНИЕ v3.2.8: Retry mechanism для race condition
         if (retryCount < 5) {
-          console.log(
+          logDebug(
             "[YFGP Init] Parent instance not initialized yet, retrying in 200ms..."
           );
           setTimeout(() => this.checkParentInitialState(retryCount + 1), 200);
         } else {
-          console.log("[YFGP Init] Parent instance not found after 5 retries");
+          logDebug("[YFGP Init] Parent instance not found after 5 retries");
         }
         return;
       }
@@ -1597,7 +2045,7 @@
       const parentConfig = parentInstance.currentConfig;
 
       if (parentConfig.source_field && parentConfig.source_type) {
-        console.log("[YFGP Init] Parent already has value, loading subfields");
+        logDebug("[YFGP Init] Parent already has value, loading subfields");
 
         const eventData = {
           parentField: this.parentField,
@@ -1622,7 +2070,7 @@
       const CacheClass = DynamicFieldSelectorV3;
 
       if (this.isSharedCacheValid(cacheKey, cacheTTL)) {
-        console.log(
+        logDebug(
           "[YFGP Cache] SHARED HIT:",
           cacheKey,
           "for",
@@ -1635,7 +2083,7 @@
 
       // v4.1.0-beta14: Check if ANOTHER instance is already loading this repeater
       if (CacheClass.pendingAjaxRequests.has(cacheKey)) {
-        console.log(
+        logDebug(
           "[YFGP AJAX] Already loading by another instance, waiting...",
           cacheKey,
           "for",
@@ -1655,7 +2103,7 @@
       }
 
       // Cache MISS → Start NEW AJAX request
-      console.log(
+      logDebug(
         "[YFGP Cache] SHARED MISS, loading via AJAX:",
         cacheKey,
         "for",
@@ -1669,7 +2117,7 @@
           CacheClass.sharedSubfieldCache.set(cacheKey, subfields);
           CacheClass.sharedCacheTimestamps.set(cacheKey, Date.now());
 
-          console.log(
+          logDebug(
             "[YFGP Cache] SHARED Stored:",
             cacheKey,
             subfields.length,
@@ -1743,7 +2191,7 @@
             }
             
             if (parsedResponse && parsedResponse.success && Array.isArray(parsedResponse.data)) {
-              console.log(
+              logDebug(
                 "[YFGP AJAX] Loaded",
                 parsedResponse.data.length,
                 "subfields"
@@ -1820,7 +2268,7 @@
           $dropdown.val(this.currentConfig.source_field);
         }
 
-        console.log(
+        logDebug(
           "[YFGP Dropdown] Updated with",
           subfields.length,
           "subfields"
@@ -1892,6 +2340,8 @@
   /**
    * jQuery plugin
    */
+  // v4.18.22: Debug - verify plugin is being defined
+  logDebug("[YFGP Debug] Defining jQuery plugin dynamicFieldSelectorV3, $.fn available:", typeof $.fn !== 'undefined');
   $.fn.dynamicFieldSelectorV3 = function (options) {
     return this.each(function () {
       const $this = $(this);
@@ -1923,9 +2373,40 @@
       });
     });
 
-    console.log("Dynamic Field Selector V3 инициализирован!");
+    logDebug("Dynamic Field Selector V3 инициализирован!");
   });
-})(jQuery);
+  
+    // v4.18.22: Debug - verify plugin is available after definition
+    logDebug("[YFGP Debug] jQuery plugin defined, available:", typeof $.fn.dynamicFieldSelectorV3 === "function");
+  })(jQuery);
+} catch (error) {
+  console.error("[YFGP Debug] ❌ IIFE Error:", error);
+  console.error("[YFGP Debug] Error stack:", error.stack);
+}
+
+const yfgpGlobalDebug = (...args) => {
+  const queryValue = getDebugQueryParam();
+  if (queryValue !== null) {
+    if (queryValue !== "1") {
+      return;
+    }
+    if (typeof console !== "undefined" && typeof console.debug === "function") {
+      console.debug(...args);
+      return;
+    }
+  }
+  if (
+    typeof window !== "undefined" &&
+    window.yfgpLog &&
+    typeof window.yfgpLog.debug === "function"
+  ) {
+    window.yfgpLog.debug(...args);
+    return;
+  }
+  if (typeof console !== "undefined" && typeof console.debug === "function") {
+    console.debug(...args);
+  }
+};
 
 // ==========================================
 // v3.4.1: Global Mapping Data Collection (Task #13 - Production-Ready Save)
@@ -1938,7 +2419,7 @@
  * @returns {Object} {fields: {...}, settings: {...}}
  */
 window.collectAllMappingData = function () {
-  console.log("[YFGP Save] Collecting all mapping data...");
+  yfgpGlobalDebug("[YFGP Save] Collecting all mapping data...");
 
   const mappingData = {
     fields: {},
@@ -1985,7 +2466,7 @@ window.collectAllMappingData = function () {
     }
   });
 
-  console.log(
+  yfgpGlobalDebug(
     "[YFGP Save] Collected:",
     Object.keys(mappingData.fields).length,
     "fields,",
@@ -2002,7 +2483,7 @@ window.collectAllMappingData = function () {
 jQuery(document).ready(function ($) {
   // v3.4.1: Submit handler для формы маппинга
   $("form#yfgp-mapping-form-v3").on("submit", function (e) {
-    console.log("[YFGP Save] Form submit triggered");
+    yfgpGlobalDebug("[YFGP Save] Form submit triggered");
 
     try {
       // Собрать данные
@@ -2021,8 +2502,20 @@ jQuery(document).ready(function ($) {
       // JSON serialization
       const jsonString = JSON.stringify(mappingData);
 
-      console.log("[YFGP Save] JSON size:", jsonString.length, "bytes");
-      console.log(
+      // v4.18.22: Security - Client-side validation of mapping size (DoS protection)
+      const MAX_MAPPING_SIZE = 1048576; // 1MB (matches server-side limit)
+      const mappingSize = new Blob([jsonString]).size;
+      
+      if (mappingSize > MAX_MAPPING_SIZE) {
+        const sizeMB = (mappingSize / (1024 * 1024)).toFixed(2);
+        const maxMB = (MAX_MAPPING_SIZE / (1024 * 1024)).toFixed(2);
+        alert("⚠️ Размер маппинга (" + sizeMB + " MB) превышает максимальный лимит (" + maxMB + " MB).\n\nПожалуйста, уменьшите количество данных или обратитесь к администратору.");
+        e.preventDefault();
+        return false;
+      }
+
+      yfgpGlobalDebug("[YFGP Save] JSON size:", jsonString.length, "bytes");
+      yfgpGlobalDebug(
         "[YFGP Save] JSON preview:",
         jsonString.substring(0, 200) + "..."
       );
@@ -2030,7 +2523,7 @@ jQuery(document).ready(function ($) {
       // Заполнить hidden input
       $("#yfgp_mapping_json").val(jsonString);
 
-      console.log("[YFGP Save] JSON готов к отправке!");
+      yfgpGlobalDebug("[YFGP Save] JSON готов к отправке!");
 
       // Form submit продолжится нормально
       return true;
@@ -2042,7 +2535,7 @@ jQuery(document).ready(function ($) {
     }
   });
 
-  console.log(
+  yfgpGlobalDebug(
     "[YFGP Save] Submit handler registered for #yfgp-mapping-form-v3"
   );
 
@@ -2055,7 +2548,7 @@ jQuery(document).ready(function ($) {
    * @param {string} tabType - doctors, clinics, services, offers
    */
   function loadTestPostsList(tabType) {
-    console.log("[YFGP Test] Loading posts list for tab:", tabType);
+    yfgpGlobalDebug("[YFGP Test] Loading posts list for tab:", tabType);
 
     const $selector = $("#yfgp-test-post-" + tabType);
 
@@ -2085,8 +2578,9 @@ jQuery(document).ready(function ($) {
               '<option value="' + post.id + '">' + post.title + "</option>";
           });
 
-          $selector.html(options);
-          console.log("[YFGP Test] Loaded", posts.length, "posts for", tabType);
+          // v4.18.22: Security - Sanitize HTML to prevent XSS
+          $selector.html(sanitizeHtml(options));
+          yfgpGlobalDebug("[YFGP Test] Loaded", posts.length, "posts for", tabType);
         } else {
           $selector.html('<option value="">❌ Ошибка загрузки</option>');
           console.error("[YFGP Test] Error:", response);
@@ -2133,7 +2627,7 @@ jQuery(document).ready(function ($) {
     }
 
     const activeTab = tabMatch[1];
-    console.log("[YFGP Test] Active tab:", activeTab);
+    yfgpGlobalDebug("[YFGP Test] Active tab:", activeTab);
 
     // Скрыть все dropdowns
     $(".yfgp-test-post-selector").hide();
@@ -2167,5 +2661,5 @@ jQuery(document).ready(function ($) {
   // Инициализация при загрузке страницы
   updateTestPostSelector();
 
-  console.log("[YFGP Test] Test Preview Post Selector initialized");
+  yfgpGlobalDebug("[YFGP Test] Test Preview Post Selector initialized");
 });

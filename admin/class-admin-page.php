@@ -146,21 +146,37 @@ class YFGP_Admin_Page {
             true
         );
         
-        // Скрипт динамических полей
-        wp_enqueue_script(
-            'yfgp-dynamic-fields',
-            YFGP_PLUGIN_URL . 'admin/assets/js/dynamic-field-selector.js',
-            array('jquery'),
-            YFGP_VERSION,
-            true
-        );
+        $legacy_selector_enabled = !defined('YFGP_DISABLE_LEGACY_SELECTOR') || !YFGP_DISABLE_LEGACY_SELECTOR;
+        /**
+         * Позволяет включить/отключить загрузку legacy-скрипта динамических полей.
+         *
+         * @since 4.18.50
+         *
+         * @param bool   $enabled Загружать ли legacy-скрипт.
+         * @param string $hook    Текущий admin hook.
+         */
+        $legacy_selector_enabled = apply_filters('yfgp_enable_legacy_dynamic_fields', $legacy_selector_enabled, $hook);
+        
+        if ($legacy_selector_enabled) {
+            wp_enqueue_script(
+                'yfgp-dynamic-fields',
+                YFGP_PLUGIN_URL . 'admin/assets/js/dynamic-field-selector.js',
+                array('jquery'),
+                YFGP_VERSION . '.' . time(), // v4.18.22: Cache busting for async fix
+                true
+            );
+        }
         
         // Скрипт динамических полей V3 (v3.0.0)
+        $v3_dependencies = array('jquery');
+        if ($legacy_selector_enabled) {
+            $v3_dependencies[] = 'yfgp-dynamic-fields';
+        }
         wp_enqueue_script(
             'yfgp-dynamic-fields-v3',
             YFGP_PLUGIN_URL . 'admin/assets/js/dynamic-field-selector-v3.js',
-            array('jquery'),
-            YFGP_VERSION,
+            $v3_dependencies,
+            YFGP_VERSION . '.' . time(), // v4.18.22: Force cache busting for JS fixes
             true
         );
         
@@ -189,12 +205,31 @@ class YFGP_Admin_Page {
                 'doctors' => $field_mapper->get_available_fields('doctors'),
                 'clinics' => $field_mapper->get_available_fields('clinics'),
                 'services' => $field_mapper->get_available_fields('services'),
-                'prices' => $field_mapper->get_available_fields('prices'),
+                'prices' => $field_mapper->get_available_fields('prices')
             )
         );
+
+        $debug_logging_enabled = defined('YFGP_DEBUG_LOGS') ? (bool) YFGP_DEBUG_LOGS : false;
+        /**
+         * Позволяет включить подробное логирование на странице маппинга.
+         *
+         * @since 4.18.51
+         *
+         * @param bool   $enabled Включено ли логирование.
+         * @param string $hook    Текущий admin hook.
+         */
+        $debug_logging_enabled = apply_filters('yfgp_dynamic_field_debug_mode', $debug_logging_enabled, $hook);
+
+        if (isset($_GET['yfgp_debug'])) {
+            $debug_logging_enabled = sanitize_text_field(wp_unslash($_GET['yfgp_debug'])) === '1';
+        }
+
+        $ajax_data['debug'] = $debug_logging_enabled;
         
         wp_localize_script('yfgp-admin-script', 'yfgpAjax', $ajax_data);
-        wp_localize_script('yfgp-dynamic-fields', 'yfgpAjax', $ajax_data);
+        if ($legacy_selector_enabled) {
+            wp_localize_script('yfgp-dynamic-fields', 'yfgpAjax', $ajax_data);
+        }
         wp_localize_script('yfgp-dynamic-fields-v3', 'yfgpAjax', $ajax_data);
     }
     
@@ -679,16 +714,8 @@ class YFGP_Admin_Page {
     }
     
     public function ajax_get_available_cpts(): void {
-        // Проверка nonce
-        // v4.18.13: Единый стандарт nonce для всех AJAX handlers
-        if (!check_ajax_referer('yfgp_ajax_nonce', 'nonce', false)) {
-            $this->send_json_error_no_bom(array('message' => 'Invalid nonce'));
-            return;
-        }
-        
-        // Проверка прав
-        if (!current_user_can('manage_options')) {
-            $this->send_json_error_no_bom(array('message' => 'Insufficient permissions'));
+        // v4.18.22: Refactoring - Use common validation method
+        if (!$this->validate_ajax_request()) {
             return;
         }
         
@@ -797,16 +824,8 @@ class YFGP_Admin_Page {
      * @since 3.0.0
      */
     public function ajax_get_fields_v3(): void {
-        // Проверка nonce
-        // v4.18.13: Единый стандарт nonce для всех AJAX handlers
-        if (!check_ajax_referer('yfgp_ajax_nonce', 'nonce', false)) {
-            $this->send_json_error_no_bom(array('message' => 'Invalid nonce'));
-            return;
-        }
-        
-        // Проверка прав
-        if (!current_user_can('manage_options')) {
-            $this->send_json_error_no_bom(array('message' => 'Insufficient permissions'));
+        // v4.18.22: Refactoring - Use common validation method
+        if (!$this->validate_ajax_request()) {
             return;
         }
         
@@ -829,16 +848,8 @@ class YFGP_Admin_Page {
      * @since 3.0.0
      */
     public function ajax_get_cpts_v3(): void {
-        // Проверка nonce
-        // v4.18.13: Единый стандарт nonce для всех AJAX handlers
-        if (!check_ajax_referer('yfgp_ajax_nonce', 'nonce', false)) {
-            $this->send_json_error_no_bom(array('message' => 'Invalid nonce'));
-            return;
-        }
-        
-        // Проверка прав
-        if (!current_user_can('manage_options')) {
-            $this->send_json_error_no_bom(array('message' => 'Insufficient permissions'));
+        // v4.18.22: Refactoring - Use common validation method
+        if (!$this->validate_ajax_request()) {
             return;
         }
         
@@ -883,20 +894,12 @@ class YFGP_Admin_Page {
      * @return void
      */
     public function ajax_get_repeater_subfields(): void {
-        // 1. Security checks
-        // v4.18.13: Единый стандарт nonce для всех AJAX handlers
-        if (!check_ajax_referer('yfgp_ajax_nonce', 'nonce', false)) {
-            $this->send_json_error_no_bom(array('message' => 'Invalid nonce'));
+        // v4.18.22: Refactoring - Use common validation method
+        if (!$this->validate_ajax_request()) {
             return;
         }
         
-        // 2. Permissions check
-        if (!current_user_can('manage_options')) {
-            $this->send_json_error_no_bom(array('message' => 'Insufficient permissions'));
-            return;
-        }
-        
-        // 3. Get and sanitize parameters
+        // Get and sanitize parameters
         $repeater_field_name = sanitize_text_field($_POST['repeater_field_name'] ?? '');
         $source_type = sanitize_text_field($_POST['source_type'] ?? '');
         $post_type = sanitize_text_field($_POST['post_type'] ?? 'doctors'); // v3.2.7: Добавлен post_type
@@ -989,6 +992,27 @@ class YFGP_Admin_Page {
             
             // КРИТИЧНО: используем wp_unslash() для получения RAW JSON данных
             $mapping_json = isset($_POST['yfgp_mapping_json']) ? wp_unslash($_POST['yfgp_mapping_json']) : '';
+            
+            // v4.18.22: Security - Check JSON size limit (5MB)
+            $max_json_size = 5 * 1024 * 1024; // 5MB
+            if (strlen($mapping_json) > $max_json_size) {
+                if (class_exists('YFGP_Logger')) {
+                    YFGP_Logger::get_instance()->warning('YFGP Security: Mapping JSON too large: ' . strlen($mapping_json) . ' bytes (max: ' . $max_json_size . ' bytes)');
+                } else {
+                    error_log('YFGP Security: Mapping JSON too large: ' . strlen($mapping_json) . ' bytes (max: ' . $max_json_size . ' bytes)');
+                }
+                while (ob_get_level()) {
+                    ob_end_clean();
+                }
+                $error_url = admin_url('admin.php?page=yandex-feed-mapping&error=json_too_large');
+                if (!headers_sent()) {
+                    wp_safe_redirect($error_url);
+                } else {
+                    echo '<script>window.location.href = "' . esc_js($error_url) . '";</script>';
+                    wp_die('Перенаправление...', 'Ошибка', array('response' => 200));
+                }
+                exit;
+            }
             
             if (empty($mapping_json)) {
                 error_log('YFGP ERROR: JSON данные пустые!');
@@ -1164,7 +1188,7 @@ class YFGP_Admin_Page {
                     $sanitized_field[$key] = sanitize_text_field($value);
                 } elseif (is_array($value)) {
                     // v4.18.20: Рекурсивная санитизация вложенных массивов (conditional_logic, nested_field и т.д.)
-                    $sanitized_field[$key] = $this->sanitize_array_recursive($value);
+                    $sanitized_field[$key] = $this->sanitize_array_recursive($value, 0);
                 } elseif (is_null($value)) {
                     $sanitized_field[$key] = null;
                 } elseif (is_bool($value)) {
@@ -1245,14 +1269,49 @@ class YFGP_Admin_Page {
           return $value;
       }
       
-      /**
-       * Рекурсивная санитизация массива (для вложенных структур)
+    /**
+     * Common AJAX request validation
+     * 
+     * @since 4.18.22: Refactoring - Common method for AJAX validation
+     * @param string $nonce_action Nonce action name
+     * @param string $nonce_name Nonce field name
+     * @param string $capability Required capability
+     * @return bool True if valid, false otherwise
+     */
+    protected function validate_ajax_request($nonce_action = 'yfgp_ajax_nonce', $nonce_name = 'nonce', $capability = 'manage_options'): bool {
+        if (!check_ajax_referer($nonce_action, $nonce_name, false)) {
+            $this->send_json_error_no_bom(array('message' => 'Invalid nonce'));
+            return false;
+        }
+        
+        if (!current_user_can($capability)) {
+            $this->send_json_error_no_bom(array('message' => 'Insufficient permissions'));
+            return false;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Рекурсивная санитизация массива (для вложенных структур)
      * 
      * @since 4.18.20
      * @param array $array Массив для санитизации
+     * @param int $depth Текущая глубина вложенности (для защиты от бесконечной рекурсии)
      * @return array Санитизированный массив
      */
-    private function sanitize_array_recursive($array) {
+    private function sanitize_array_recursive($array, $depth = 0) {
+        // v4.18.22: Security - Limit recursion depth (max 10 levels)
+        $max_depth = 10;
+        if ($depth > $max_depth) {
+            if (class_exists('YFGP_Logger')) {
+                YFGP_Logger::get_instance()->warning('YFGP Security: Array nesting too deep (' . $depth . ' levels, max: ' . $max_depth . ')');
+            } else {
+                error_log('YFGP Security: Array nesting too deep (' . $depth . ' levels, max: ' . $max_depth . ')');
+            }
+            return array(); // Return empty array if depth exceeded
+        }
+
         if (!is_array($array)) {
             return is_string($array) ? sanitize_text_field($array) : $array;
         }
@@ -1262,7 +1321,7 @@ class YFGP_Admin_Page {
             if (is_string($value)) {
                 $sanitized[$key] = sanitize_text_field($value);
             } elseif (is_array($value)) {
-                $sanitized[$key] = $this->sanitize_array_recursive($value);
+                $sanitized[$key] = $this->sanitize_array_recursive($value, $depth + 1);
             } elseif (is_numeric($value)) {
                 $sanitized[$key] = $value;
             } elseif (is_bool($value)) {

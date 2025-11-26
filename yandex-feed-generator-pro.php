@@ -8,7 +8,7 @@
 
  * Description: Универсальный генератор YML фидов для Яндекс.Вебмастера с поддержкой ACF и JetEngine
 
- * Version: 4.18.21
+ * Version: 4.18.37
 
  * Author: Vityaz Development Team
 
@@ -36,7 +36,7 @@ if (!defined('ABSPATH')) {
 
 // Константы плагина
 
-define('YFGP_VERSION', '4.18.21'); // v4.18.21: Sentry Integration - интеграция с Sentry SDK для мониторинга ошибок
+define('YFGP_VERSION', '4.18.49'); // v4.18.49: FIX - price blocks now output correctly in all offers (isset check instead of !empty)
 
 if (!defined('YFGP_PLUGIN_DIR')) {
 
@@ -161,6 +161,24 @@ class Yandex_Feed_Generator_Pro {
      */
 
     private function load_dependencies() {
+
+        // v4.18.22: Constants Class (замена магических чисел/строк)
+        require_once YFGP_PLUGIN_DIR . 'includes/class-constants.php';
+
+        // v4.18.22: Logger Class (централизованное логирование с агрегацией)
+        require_once YFGP_PLUGIN_DIR . 'includes/class-logger.php';
+
+        // v4.18.22: Mapping Config Validator (валидация конфигурации маппинга, SQL injection protection)
+        require_once YFGP_PLUGIN_DIR . 'includes/class-mapping-config-validator.php';
+
+        // v4.18.22: Encoding Normalizer (нормализация UTF-8 для кириллицы)
+        require_once YFGP_PLUGIN_DIR . 'includes/helpers/encoding-normalizer.php';
+
+        // v4.18.22: Data Sanitizer (санитизация данных перед выводом в XML/UI)
+        require_once YFGP_PLUGIN_DIR . 'includes/class-data-sanitizer.php';
+
+        // v4.18.22: Post Batch Loader (пакетная загрузка постов для предотвращения OOM)
+        require_once YFGP_PLUGIN_DIR . 'includes/class-post-batch-loader.php';
 
         // Только v2 версии классов
 
@@ -472,6 +490,64 @@ class Yandex_Feed_Generator_Pro {
 
     
 
+    /**
+     * v4.18.22: Security - Validates and sanitizes filename to prevent path traversal
+     * 
+     * @param string $filename Filename to validate
+     * @return string Validated filename
+     * @throws Exception If filename is invalid
+     */
+    /**
+     * Validate feed filename to prevent path traversal attacks
+     * 
+     * @since 4.18.22: Enhanced security validation
+     * @param string $filename Filename to validate
+     * @return string Validated filename
+     * @throws Exception If filename is invalid
+     */
+    private function validate_feed_filename($filename) {
+        // v4.18.22: Security - Validate filename to prevent path traversal
+        $filename = sanitize_file_name($filename);
+        
+        // CRITICAL: basename() prevents directory traversal
+        $filename = basename($filename);
+
+        // Additional validation: only allow .yml and .xml extensions
+        $allowed_extensions = array('yml', 'xml');
+        $file_extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        
+        if (!in_array($file_extension, $allowed_extensions, true)) {
+            // If no extension or invalid, default to .yml
+            $filename = pathinfo($filename, PATHINFO_FILENAME) . '.yml';
+        }
+
+        // Only allow letters, numbers, dashes, dots, and underscores
+        $filename = preg_replace('/[^a-zA-Z0-9\-\._]+/', '', $filename);
+
+        // Prevent empty filename
+        if (empty($filename)) {
+            throw new Exception('Invalid filename: empty after sanitization');
+        }
+
+        // Prevent hidden files (starting with dot)
+        if (strpos($filename, '.') === 0) {
+            throw new Exception('Invalid filename: cannot start with dot');
+        }
+
+        // Ensure valid extension
+        $file_extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if (!in_array($file_extension, $allowed_extensions, true)) {
+            $filename = pathinfo($filename, PATHINFO_FILENAME) . '.yml';
+        }
+
+        // Ensure filename doesn't contain dangerous characters (double check)
+        if (preg_match('/[^a-zA-Z0-9._-]/', $filename)) {
+            throw new Exception('Invalid filename. Only alphanumeric characters, dots, underscores, and hyphens are allowed.');
+        }
+
+        return $filename;
+    }
+
     public function save_feed_file(string $yml, string $filename = 'doctors.yml'): array {
 
         $upload_dir = wp_upload_dir();
@@ -492,7 +568,17 @@ class Yandex_Feed_Generator_Pro {
 
         }
 
-
+        // v4.18.22: Security - Validate and sanitize filename (path traversal protection)
+        try {
+            $filename = $this->validate_feed_filename($filename);
+        } catch (Exception $e) {
+            if (class_exists('YFGP_Logger')) {
+                YFGP_Logger::get_instance()->error('YFGP Security: ' . $e->getMessage());
+            } else {
+                error_log('YFGP Security: ' . $e->getMessage());
+            }
+            throw new Exception('Invalid filename provided');
+        }
 
         if (!function_exists('wp_tempnam')) {
 
@@ -500,9 +586,22 @@ class Yandex_Feed_Generator_Pro {
 
         }
 
-
-
-        $feed_path = trailingslashit($feed_dir) . ltrim($filename, '/');
+        // Build full path (now safe - filename validated)
+        $feed_path = trailingslashit($feed_dir) . $filename;
+        
+        // v4.18.22: Security - Additional path validation using realpath
+        $upload_dir_real = realpath($upload_dir['basedir']);
+        $feed_dir_real = realpath($feed_dir);
+        
+        if (!$feed_dir_real || !$upload_dir_real || strpos($feed_dir_real, $upload_dir_real) !== 0) {
+            throw new Exception('Invalid feed directory path. Path traversal detected.');
+        }
+        
+        // Final validation: ensure final path is within allowed directory
+        $feed_path_real = realpath(dirname($feed_path));
+        if (!$feed_path_real || $feed_path_real !== $feed_dir_real) {
+            throw new Exception('Invalid feed file path. Path traversal detected.');
+        }
 
         $temp_file = wp_tempnam($filename, $feed_dir);
 
@@ -570,7 +669,8 @@ class Yandex_Feed_Generator_Pro {
 
 
 
-        $feed_url = trailingslashit($upload_dir['baseurl']) . 'feed/' . ltrim($filename, '/');
+        // Filename already validated and sanitized above (path traversal protection)
+        $feed_url = trailingslashit($upload_dir['baseurl']) . 'feed/' . $filename;
 
 
 
@@ -636,15 +736,42 @@ class Yandex_Feed_Generator_Pro {
 
         
 
-        $post_type = sanitize_text_field($_POST['post_type'] ?? '');
+        // v4.18.22: Security - Whitelisting для post_type (SQL injection protection)
+        $settings = get_option('yfgp_settings', array());
+        $allowed_post_types = array();
+
+        // Build whitelist from settings
+        if (!empty($settings['post_type'])) {
+            $allowed_post_types[] = sanitize_key($settings['post_type']);
+        }
+        if (!empty($settings['cpt_clinics'])) {
+            $allowed_post_types[] = sanitize_key($settings['cpt_clinics']);
+        }
+        if (!empty($settings['cpt_services'])) {
+            $allowed_post_types[] = sanitize_key($settings['cpt_services']);
+        }
+
+        // Fallback to default if no settings
+        if (empty($allowed_post_types)) {
+            $allowed_post_types = array('doctors', 'clinics', 'services');
+        }
+
+        $post_type = isset($_POST['post_type']) ? sanitize_key($_POST['post_type']) : 'doctors';
+
+        // Validate post type against whitelist
+        if (!in_array($post_type, $allowed_post_types, true)) {
+            if (class_exists('YFGP_Logger')) {
+                YFGP_Logger::get_instance()->warning('YFGP Security: Invalid post_type attempted: ' . $post_type);
+            }
+            $error_handler->handle_ajax_error('Invalid post type: ' . esc_html($post_type), array('action' => 'ajax_generate_feed'));
+            return;
+        }
 
         $preview_only = isset($_POST['preview_only']) && $_POST['preview_only'] === 'true';
 
         
 
             // Выбираем генератор в зависимости от настроек
-
-            $settings = get_option('yfgp_settings', array());
 
             $feed_format = $settings['feed_format'] ?? 'v2';
 
@@ -802,9 +929,43 @@ class Yandex_Feed_Generator_Pro {
 
         $mapping = $_POST['mapping'] ?? array();
 
+        // v4.18.22: Security - Check size limit (DoS protection)
+        $mapping_json = json_encode($mapping);
+        if (class_exists('YFGP_Constants')) {
+            $max_size = YFGP_Constants::MAX_MAPPING_SIZE;
+        } else {
+            $max_size = 1048576; // 1MB fallback
+        }
         
+        if (strlen($mapping_json) > $max_size) {
+            if (class_exists('YFGP_Logger')) {
+                YFGP_Logger::get_instance()->warning('YFGP Security: Mapping data too large: ' . strlen($mapping_json) . ' bytes');
+            }
+            wp_send_json_error('Размер данных маппинга превышает максимальный лимит (' . round($max_size / 1024 / 1024, 2) . ' MB)');
+            return;
+        }
 
-        update_option('yfgp_field_mapping', $mapping);
+        // v4.18.22: Security - Validate mapping configuration
+        if (class_exists('YFGP_Mapping_Config_Validator')) {
+            $validator = new YFGP_Mapping_Config_Validator();
+            if (!$validator->validate_mapping_array($mapping)) {
+                if (class_exists('YFGP_Logger')) {
+                    YFGP_Logger::get_instance()->error('YFGP Security: Mapping validation failed');
+                }
+                wp_send_json_error('Ошибка валидации маппинга. Проверьте конфигурацию полей.');
+                return;
+            }
+        }
+
+        // v4.18.22: Security - Sanitize mapping array (XSS protection)
+        if (class_exists('YFGP_Data_Sanitizer')) {
+            $sanitizer = new YFGP_Data_Sanitizer();
+            $mapping = $sanitizer->sanitize($mapping);
+        }
+
+        // Use correct option name (v3 or legacy)
+        $option_name = class_exists('YFGP_Constants') ? YFGP_Constants::OPTION_MAPPING : 'yfgp_field_mapping_v3';
+        update_option($option_name, $mapping);
 
         
 
@@ -1061,7 +1222,8 @@ class Yandex_Feed_Generator_Pro {
 
             $result = array(
 
-                'posts_found' => count(get_posts(array('post_type' => $post_type, 'post_status' => 'publish', 'posts_per_page' => -1))),
+                // v4.18.22: Performance - Use wp_count_posts instead of get_posts with -1 to prevent OOM
+                'posts_found' => (int) wp_count_posts($post_type)->publish,
 
                 'clinics_found' => 0,
 
@@ -2924,8 +3086,18 @@ class Yandex_Feed_Generator_Pro {
         
 
         $xml_content = wp_unslash($_POST['xml_content'] ?? '');
-
         
+        // v4.18.22: Security - Check XML size limit (50MB)
+        $max_xml_size = 50 * 1024 * 1024; // 50MB
+        if (strlen($xml_content) > $max_xml_size) {
+            if (class_exists('YFGP_Logger')) {
+                YFGP_Logger::get_instance()->warning('YFGP Security: XML content too large: ' . strlen($xml_content) . ' bytes (max: ' . $max_xml_size . ' bytes)');
+            } else {
+                error_log('YFGP Security: XML content too large: ' . strlen($xml_content) . ' bytes (max: ' . $max_xml_size . ' bytes)');
+            }
+            wp_send_json_error('Размер XML превышает максимальный лимит (' . round($max_xml_size / 1024 / 1024, 2) . ' MB)');
+            return;
+        }
 
         // Простая валидация XML
 
@@ -3064,15 +3236,63 @@ class Yandex_Feed_Generator_Pro {
         
 
         $config_json = wp_unslash($_POST['config_json'] ?? '');
+        
+        // v4.18.22: Security - Check JSON size limit (5MB)
+        $max_json_size = 5 * 1024 * 1024; // 5MB
+        if (strlen($config_json) > $max_json_size) {
+            if (class_exists('YFGP_Logger')) {
+                YFGP_Logger::get_instance()->warning('YFGP Security: Config JSON too large: ' . strlen($config_json) . ' bytes (max: ' . $max_json_size . ' bytes)');
+            } else {
+                error_log('YFGP Security: Config JSON too large: ' . strlen($config_json) . ' bytes (max: ' . $max_json_size . ' bytes)');
+            }
+            wp_send_json_error('Размер JSON превышает максимальный лимит (' . round($max_json_size / 1024 / 1024, 2) . ' MB)');
+            return;
+        }
 
         $config = json_decode($config_json, true);
-
         
-
-        if (!$config || !isset($config['settings']) || !isset($config['mapping'])) {
-
-            wp_send_json_error('Неверный формат конфигурации');
-
+        // v4.18.22: Security - Validate JSON decoding
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            wp_send_json_error('Ошибка декодирования JSON: ' . json_last_error_msg());
+            return;
+        }
+        
+        // v4.18.22: Security - Validate config structure
+        if (!$config || !is_array($config)) {
+            wp_send_json_error('Неверный формат конфигурации: ожидается массив');
+            return;
+        }
+        
+        if (!isset($config['settings']) || !is_array($config['settings'])) {
+            wp_send_json_error('Неверный формат конфигурации: отсутствует или некорректно поле settings');
+            return;
+        }
+        
+        if (!isset($config['mapping']) || !is_array($config['mapping'])) {
+            wp_send_json_error('Неверный формат конфигурации: отсутствует или некорректно поле mapping');
+            return;
+        }
+        
+        // v4.18.22: Security - Validate version compatibility
+        if (isset($config['version'])) {
+            $imported_version = $config['version'];
+            $current_version = defined('YFGP_VERSION') ? YFGP_VERSION : '4.18.0';
+            
+            // Allow import from same major version or older
+            if (version_compare($imported_version, $current_version, '>')) {
+                wp_send_json_error('Версия импортируемой конфигурации (' . $imported_version . ') новее текущей версии плагина (' . $current_version . ')');
+                return;
+            }
+        }
+        
+        // v4.18.22: Security - Validate and sanitize imported config
+        if (class_exists('YFGP_Data_Sanitizer')) {
+            $sanitizer = new YFGP_Data_Sanitizer();
+            $config['settings'] = $sanitizer->sanitize($config['settings']);
+            $config['mapping'] = $sanitizer->sanitize($config['mapping']);
+        } else {
+            // Fallback sanitization
+            $config['settings'] = array_map('sanitize_text_field', $config['settings']);
         }
 
         
@@ -3299,39 +3519,29 @@ class Yandex_Feed_Generator_Pro {
 
         
 
-        $taxonomy = sanitize_text_field($_POST['taxonomy'] ?? '');
-
+        $taxonomy = sanitize_key($_POST['taxonomy'] ?? '');
         
-
+        // v4.18.22: Security - Validate taxonomy exists
         if (empty($taxonomy)) {
-
-            // v4.18.12: Graceful fallback - возвращаем пустой массив вместо ошибки
-
-            error_log('[YFGP] ajax_get_terms: Таксономия не указана, возвращаем пустой массив');
-
-            $this->send_json_success_no_bom(array('terms' => array()));
-
+            if (class_exists('YFGP_Logger')) {
+                YFGP_Logger::get_instance()->warning('YFGP: Taxonomy not specified in ajax_get_terms');
+            } else {
+                error_log('[YFGP] ajax_get_terms: Таксономия не указана');
+            }
+            wp_send_json_error('Таксономия не указана');
             return;
-
         }
-
         
-
-        // v4.18.12: Проверка существования таксономии перед запросом
-
+        // v4.18.22: Security - Validate taxonomy exists
         if (!taxonomy_exists($taxonomy)) {
-
-            // Graceful fallback - возвращаем пустой массив вместо ошибки
-
-            error_log('[YFGP] ajax_get_terms: Таксономия "' . $taxonomy . '" не существует, возвращаем пустой массив');
-
-            $this->send_json_success_no_bom(array('terms' => array()));
-
+            if (class_exists('YFGP_Logger')) {
+                YFGP_Logger::get_instance()->warning('YFGP: Taxonomy does not exist: ' . $taxonomy);
+            } else {
+                error_log('YFGP: Taxonomy does not exist: ' . $taxonomy);
+            }
+            wp_send_json_error('Таксономия "' . esc_html($taxonomy) . '" не существует');
             return;
-
         }
-
-        
 
         $terms = get_terms(array(
 
@@ -3343,16 +3553,15 @@ class Yandex_Feed_Generator_Pro {
 
         
 
-        // v4.18.12: Graceful fallback для WP_Error - возвращаем пустой массив вместо ошибки
-
+        // v4.18.22: Improved error handling
         if (is_wp_error($terms)) {
-
-            error_log('[YFGP] ajax_get_terms: Ошибка получения терминов для таксономии "' . $taxonomy . '": ' . $terms->get_error_message() . ', возвращаем пустой массив');
-
-            $this->send_json_success_no_bom(array('terms' => array()));
-
+            if (class_exists('YFGP_Logger')) {
+                YFGP_Logger::get_instance()->error('YFGP: Error getting terms: ' . $terms->get_error_message());
+            } else {
+                error_log('YFGP: Error getting terms: ' . $terms->get_error_message());
+            }
+            wp_send_json_error('Ошибка получения терминов: ' . $terms->get_error_message());
             return;
-
         }
 
         
@@ -3367,12 +3576,13 @@ class Yandex_Feed_Generator_Pro {
 
         
 
-        // v4.18.12: Логирование для отладки (только если терминов нет)
-
+        // v4.18.22: Logging for debugging (only if no terms found)
         if (empty($terms_array)) {
-
-            error_log('[YFGP] ajax_get_terms: Таксономия "' . $taxonomy . '" существует, но терминов не найдено');
-
+            if (class_exists('YFGP_Logger')) {
+                YFGP_Logger::get_instance()->info('YFGP: Taxonomy "' . $taxonomy . '" exists, but no terms found');
+            } else {
+                error_log('[YFGP] ajax_get_terms: Таксономия "' . $taxonomy . '" существует, но терминов не найдено');
+            }
         }
 
         
