@@ -1,9 +1,9 @@
 ﻿# Yandex Feed Generator Pro - Main Documentation
 
-> **Plugin version:** 4.18.37  
-> **Last updated:** 2025-11-26  
-> **Latest:** Тихий лог и устранение fallback-предупреждений на странице маппинга.  
-> _Комментарий: централизованное логирование через yfgpLog, очистка inline-логов, устранение fallback-предупреждений._ > **Purpose:** generate Yandex.Health (v2.0) YML feeds for WordPress sites  
+> **Plugin version:** 4.18.49  
+> **Last updated:** 2025-11-27  
+> **Latest:** Удалён JetEngine fallback `wp_jet_rel_*` в unified mapper.  
+> _Комментарий: `extractRelationshipBasic()` теперь использует только JetEngine API (`db->table()`), избавляясь от прямых `SHOW TABLES LIKE` запросов._ > **Purpose:** generate Yandex.Health (v2.0) YML feeds for WordPress sites  
 > **v4.18.16:** JetEngine API унифицирован (`get_meta_fields_for_object`), добавлено кэширование полей, debug логи обёрнуты в `WP_DEBUG`  
 > **Status:** Production Ready (unified mapping, ACF & JetEngine support, no hardcoded field names)
 
@@ -98,6 +98,10 @@ Data flow: admin saves mapping → cron/manual generation вызывает `gene
 - **Automatic base service hardening:** `create_auto_base_service()` больше не генерирует технические описания и не проставляет «0 ₽». Название и description берутся из пользовательского поля «Название базовой услуги» (или карты специализаций), а цена появляется только если в `yfgp_settings['default_auto_service_price']` задано числовое значение. Это исключает "бесплатные" офферы и делает поведение полностью управляемым из настроек UI.
 - **Offer price guards:** `class-offer-builder.php` и `class-feed-xml-writer.php` научились учитывать пустые значения (`''`, `null`, `'0'`). Если на услуги нет цены/скидки, блок `<price>` и атрибуты `currency/discount_name` вовсе не выводятся, благодаря чему smoke сравнение JSON ↔ YML проходит без диффов.
 - **Fix encoding issues (cracked characters):** все кракозябры в `class-feed-generator-v2.php` и вспомогательных файлах исправлены, комментарии приведены к UTF-8 без BOM.
+
+## 2025-11-27 updates (v4.18.49)
+
+- **JetEngine relationship queries:** `includes/class-field-mapper-unified.php::extractRelationshipBasic()` лишился fallback'а `wp_jet_rel_*` + `SHOW TABLES LIKE`. Теперь имя таблицы берётся только через JetEngine API (`$relation->db->table()`), а при недоступности API блок SQL пропускается. Это убирает хардкод префикса, уменьшает количество прямых SQL и приводит поведение в соответствие с `findRelatedPostByCpt()`.
 
 ## 2025-11-26 updates (v4.18.37)
 
