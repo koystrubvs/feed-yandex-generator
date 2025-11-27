@@ -1461,21 +1461,17 @@ class YFGP_Field_Mapper_Unified {
                         $items = $relation->get_related_items($post_id, !$is_reverse);
                         
                         // v4.18.23 FIX: Если JetEngine API не сохранил порядок, используем прямой запрос к БД с ORDER BY _ID
-                        // v4.18.25 FIX: Используем API метод для получения имени таблицы вместо хардкода
+                        // v4.18.37 FIX: Используем только API метод для получения имени таблицы (без fallback)
                         if (empty($items)) {
                             global $wpdb;
                             $relation_table = '';
+                            $table_exists = false;
                             
                             // Используем API метод если доступен
                             if (isset($relation->db) && method_exists($relation->db, 'table')) {
                                 $relation_table = $relation->db->table();
                                 // Если таблица получена через API, она должна существовать
                                 $table_exists = true;
-                            } else {
-                                // Fallback только если API недоступен (для обратной совместимости)
-                                $relation_table = $wpdb->prefix . 'jet_rel_' . $relation_id;
-                                // Проверяем существование таблицы для fallback
-                                $table_exists = (bool) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $relation_table));
                             }
                             
                             if ($relation_table && $table_exists) {
