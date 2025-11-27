@@ -809,36 +809,43 @@ class YFGP_Field_Mapper_Unified {
         global $wpdb;
         
         // Пробуем найти через JetEngine relationships (обратная связь)
-        // Ищем в таблицах wp_jet_rel_* где child_object_id = $post_id и parent_object_id имеет post_type = $target_cpt
-        $rel_tables = $wpdb->get_col("SHOW TABLES LIKE '{$wpdb->prefix}jet_rel_%'");
-        
-        foreach ($rel_tables as $table) {
-            // Проверяем прямую связь (parent_object_id = $post_id)
-            $related_id = $wpdb->get_var($wpdb->prepare(
-                "SELECT child_object_id FROM {$table} 
-                WHERE parent_object_id = %d 
-                AND child_object_id IN (SELECT ID FROM {$wpdb->posts} WHERE post_type = %s AND post_status = 'publish')
-                LIMIT 1",
-                $post_id,
-                $target_cpt
-            ));
+        // Используем API JetEngine вместо хардкода названий таблиц
+        if (function_exists('jet_engine') && isset(jet_engine()->relations)) {
+            $relations = jet_engine()->relations->get_active_relations();
             
-            if ($related_id) {
-                return (int) $related_id;
-            }
-            
-            // Проверяем обратную связь (child_object_id = $post_id)
-            $related_id = $wpdb->get_var($wpdb->prepare(
-                "SELECT parent_object_id FROM {$table} 
-                WHERE child_object_id = %d 
-                AND parent_object_id IN (SELECT ID FROM {$wpdb->posts} WHERE post_type = %s AND post_status = 'publish')
-                LIMIT 1",
-                $post_id,
-                $target_cpt
-            ));
-            
-            if ($related_id) {
-                return (int) $related_id;
+            foreach ($relations as $relation) {
+                // Получаем имя таблицы через API
+                if (isset($relation->db) && method_exists($relation->db, 'table')) {
+                    $table = $relation->db->table();
+                    
+                    // Проверяем прямую связь (parent_object_id = $post_id)
+                    $related_id = $wpdb->get_var($wpdb->prepare(
+                        "SELECT child_object_id FROM {$table} 
+                        WHERE parent_object_id = %d 
+                        AND child_object_id IN (SELECT ID FROM {$wpdb->posts} WHERE post_type = %s AND post_status = 'publish')
+                        LIMIT 1",
+                        $post_id,
+                        $target_cpt
+                    ));
+                    
+                    if ($related_id) {
+                        return (int) $related_id;
+                    }
+                    
+                    // Проверяем обратную связь (child_object_id = $post_id)
+                    $related_id = $wpdb->get_var($wpdb->prepare(
+                        "SELECT parent_object_id FROM {$table} 
+                        WHERE child_object_id = %d 
+                        AND parent_object_id IN (SELECT ID FROM {$wpdb->posts} WHERE post_type = %s AND post_status = 'publish')
+                        LIMIT 1",
+                        $post_id,
+                        $target_cpt
+                    ));
+                    
+                    if ($related_id) {
+                        return (int) $related_id;
+                    }
+                }
             }
         }
         
@@ -1454,17 +1461,30 @@ class YFGP_Field_Mapper_Unified {
                         $items = $relation->get_related_items($post_id, !$is_reverse);
                         
                         // v4.18.23 FIX: Если JetEngine API не сохранил порядок, используем прямой запрос к БД с ORDER BY _ID
+                        // v4.18.25 FIX: Используем API метод для получения имени таблицы вместо хардкода
                         if (empty($items)) {
                             global $wpdb;
-                            $relation_table = $wpdb->prefix . 'jet_rel_' . $relation_id;
+                            $relation_table = '';
                             
-                            if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $relation_table))) {
+                            // Используем API метод если доступен
+                            if (isset($relation->db) && method_exists($relation->db, 'table')) {
+                                $relation_table = $relation->db->table();
+                                // Если таблица получена через API, она должна существовать
+                                $table_exists = true;
+                            } else {
+                                // Fallback только если API недоступен (для обратной совместимости)
+                                $relation_table = $wpdb->prefix . 'jet_rel_' . $relation_id;
+                                // Проверяем существование таблицы для fallback
+                                $table_exists = (bool) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $relation_table));
+                            }
+                            
+                            if ($relation_table && $table_exists) {
                                 if ($is_reverse) {
                                     $items = $wpdb->get_col($wpdb->prepare("SELECT parent_object_id FROM {$relation_table} WHERE child_object_id = %d ORDER BY _ID ASC", $post_id));
                                 } else {
                                     $items = $wpdb->get_col($wpdb->prepare("SELECT child_object_id FROM {$relation_table} WHERE parent_object_id = %d ORDER BY _ID ASC", $post_id));
                                 }
-                                error_log("YFGP v4.18.23: JetEngine order fix - using DB query with ORDER BY _ID for relation {$relation_id}, post {$post_id}");
+                                error_log("YFGP v4.18.25: JetEngine order fix - using DB query with ORDER BY _ID for relation {$relation_id}, post {$post_id}");
                             }
                         }
                         
