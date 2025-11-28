@@ -399,16 +399,15 @@ account default : gmail</code></pre>
             </tr>
             
             <tr>
-                <th scope="row"><label for="default_currency">Валюта по умолчанию</label></th>
+                <th scope="row"><label for="default_currency">Валюта по умолчанию <span class="required">*</span></label></th>
                 <td>
-                    <select id="default_currency" name="default_currency" class="regular-text">
+                    <select id="default_currency" name="default_currency" class="regular-text" required>
                         <option value="RUR" <?php selected($settings['default_currency'] ?? 'RUR', 'RUR'); ?>>RUR (российский рубль)</option>
-                        <option value="USD" <?php selected($settings['default_currency'] ?? 'RUR', 'USD'); ?>>USD (доллар США)</option>
-                        <option value="EUR" <?php selected($settings['default_currency'] ?? 'RUR', 'EUR'); ?>>EUR (евро)</option>
+                        <option value="RUB" <?php selected($settings['default_currency'] ?? 'RUR', 'RUB'); ?>>RUB (российский рубль)</option>
                     </select>
                     <p class="description">
-                        Яндекс.Здоровье требует RUR (по умолчанию)<br>
-                        ⚠️ <strong>v2.2.0:</strong> Хардкод удалён - теперь настраивается!
+                        <strong>Яндекс.Здоровье:</strong> Сейчас поддерживается только валюта рубли: RUR, RUB.<br>
+                        ⚠️ <strong>v4.18.38:</strong> Хардкод полностью удалён - валюта настраивается через UI, валидируется при сохранении.
                     </p>
                 </td>
             </tr>

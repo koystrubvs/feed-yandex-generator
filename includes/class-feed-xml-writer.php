@@ -289,12 +289,7 @@ class YFGP_Yml_Stream_Writer {
         return $xml;
     }
 
-    private function wrap_cdata(string $text): string {
-        // Убираем лишние пробелы и переносы строк в начале и конце
-        $trimmed = trim($text);
-        $safe = str_replace(']]>', ']]]]><![CDATA[>', $trimmed);
-        return '<![CDATA[' . $safe . ']]>';
-    }
+    // v4.18.39: wrap_cdata() moved to YFGP_Feed_Generator_Shared_Trait
 
     private function build_reviews_xml(array $reviews): string {
         $xml = '';
