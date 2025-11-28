@@ -16,10 +16,8 @@ if (!defined('ABSPATH')) {
 
 // Загрузить Unified класс
 require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
-// v4.18.39: Load base class for common logic
-require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-base.php';
 
-class YFGP_Field_Mapper_V3 extends YFGP_Field_Mapper_Base {
+class YFGP_Field_Mapper_V3 {
     
     /**
      * Singleton instance
@@ -27,7 +25,7 @@ class YFGP_Field_Mapper_V3 extends YFGP_Field_Mapper_Base {
     private static $instance = null;
     
     /**
-     * Unified mapper instance (v4.18.39: Use protected property from base class)
+     * Unified mapper instance
      */
     private $unified;
     
@@ -59,10 +57,8 @@ class YFGP_Field_Mapper_V3 extends YFGP_Field_Mapper_Base {
      * Конструктор
      */
     public function __construct() {
-        // v4.18.39: Use base class method to get unified mapper
-        $this->unified_mapper = $this->get_unified_mapper();
-        // Keep $unified for backward compatibility
-        $this->unified = $this->unified_mapper;
+        // Получить singleton Unified instance
+        $this->unified = YFGP_Field_Mapper_Unified::get_instance();
         
         // Загрузить helper классы (V3 использовал их)
         if (file_exists(YFGP_PLUGIN_DIR . 'includes/helpers/class-repeater-helper.php')) {
@@ -120,19 +116,13 @@ class YFGP_Field_Mapper_V3 extends YFGP_Field_Mapper_Base {
     // ========================================================================
     
     /**
-     * Очистить кэш (v4.18.39: Uses base class method)
+     * Очистить кэш
      * 
      * @since 3.0.0 (original)
      * @since 4.0.0 (delegates to Unified)
-     * @since 4.18.39 (uses base class method)
      */
-    public function clear_cache(): void {
-        // Use base class method
-        parent::clear_cache();
-        // Also clear via unified for backward compatibility
-        if ($this->unified !== null && method_exists($this->unified, 'clearCache')) {
-            $this->unified->clearCache();
-        }
+    public function clear_cache() {
+        $this->unified->clearCache();
     }
     
     /**

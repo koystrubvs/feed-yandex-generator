@@ -51,9 +51,8 @@ class YFGP_Mapping_Config_Validator {
     public function get_allowed_source_cpts() {
         $allowed = array();
         
-        // First priority: get from settings
-        if (!empty($this->settings['cpt_doctors'])) {
-            $allowed[] = sanitize_key($this->settings['cpt_doctors']);
+        if (!empty($this->settings['post_type'])) {
+            $allowed[] = sanitize_key($this->settings['post_type']);
         }
         if (!empty($this->settings['cpt_clinics'])) {
             $allowed[] = sanitize_key($this->settings['cpt_clinics']);
@@ -62,13 +61,9 @@ class YFGP_Mapping_Config_Validator {
             $allowed[] = sanitize_key($this->settings['cpt_services']);
         }
         
-        // Fallback: get all public post types (v4.18.39: removed hardcode)
+        // Fallback to defaults
         if (empty($allowed)) {
-            // Get all public post types (excluding built-in 'attachment', 'revision', 'nav_menu_item')
-            $public_post_types = get_post_types(array('public' => true), 'names');
-            $excluded = array('attachment', 'revision', 'nav_menu_item', 'custom_css', 'customize_changeset');
-            $allowed = array_diff($public_post_types, $excluded);
-            $allowed = array_values($allowed); // Re-index array
+            $allowed = array('doctors', 'clinics', 'services');
         }
         
         return $allowed;

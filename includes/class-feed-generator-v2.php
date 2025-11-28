@@ -38,8 +38,6 @@ class YFGP_Feed_Generator_V2 {
     private $entity_manager = null; // v4.18.11: Entity Manager для расширяемости
     /** @var YFGP_Feed_Orchestrator|null */
     private $orchestrator = null; // v4.18.17: Feed Orchestrator для координации процесса генерации
-    /** @var YFGP_Base_Service_Resolver|null */
-    private $base_service_resolver = null; // v4.18.39: Base Service Resolver для определения базовой услуги
 
     public function __construct() {
         try {
@@ -77,11 +75,6 @@ class YFGP_Feed_Generator_V2 {
         
         // v4.18.11: Initialize Entity Manager for extensibility
         $this->entity_manager = YFGP_Entity_Manager::get_instance();
-        
-        // v4.18.39: Initialize Base Service Resolver
-        if (class_exists('YFGP_Base_Service_Resolver')) {
-            $this->base_service_resolver = new YFGP_Base_Service_Resolver($this->settings);
-        }
         
         // v4.18.0: Initialize decomposed services
         // Create OfferBuilder with callbacks (callbacks require methods from FeedGenerator)
@@ -349,46 +342,18 @@ class YFGP_Feed_Generator_V2 {
     }
 
     /**
-     * Get post data (v4.18.39: Fixed OOM risk - use batch loading)
-     * 
-     * @param string $post_type Post type
-     * @return array<\WP_Post> Array of WP_Post objects
+     * Get post data
      */
     private function get_posts(string $post_type): array {
-        // Load Post_Batch_Loader if not already loaded
-        if (!class_exists('YFGP_Post_Batch_Loader')) {
-            require_once YFGP_PLUGIN_DIR . 'includes/class-post-batch-loader.php';
-        }
+        $args = array(
+            'post_type' => $post_type,
+            'post_status' => 'publish',
+            'posts_per_page' => -1,
+            'orderby' => 'menu_order',
+            'order' => 'ASC'
+        );
         
-        if (!class_exists('YFGP_Post_Batch_Loader')) {
-            // Fallback: use limited query if class not available
-            $args = array(
-                'post_type' => $post_type,
-                'post_status' => 'publish',
-                'posts_per_page' => 10000, // Safe limit instead of -1
-                'orderby' => 'menu_order',
-                'order' => 'ASC'
-            );
-            return get_posts($args);
-        }
-        
-        // Use batch loader
-        $loader = new YFGP_Post_Batch_Loader($post_type, 1000);
-        $all_posts = array();
-        
-        $loader->load_posts_in_batches(function($posts) use (&$all_posts) {
-            // Merge posts maintaining order
-            $all_posts = array_merge($all_posts, $posts);
-        });
-        
-        // Sort by menu_order if needed
-        usort($all_posts, function($a, $b) {
-            $order_a = get_post_meta($a->ID, 'menu_order', true);
-            $order_b = get_post_meta($b->ID, 'menu_order', true);
-            return (int)$order_a <=> (int)$order_b;
-        });
-        
-        return $all_posts;
+        return get_posts($args);
     }
 
     /**
@@ -1135,12 +1100,7 @@ class YFGP_Feed_Generator_V2 {
         $details = array(
             'price' => $selected['value'],
         );
-        // v4.18.38: No hardcode - currency must be set in settings (Yandex supports only RUR/RUB)
-        $currency = $this->settings['default_currency'] ?? '';
-        if (empty($currency)) {
-            error_log('YFGP v4.18.38: Currency not set in settings. Please configure default_currency in plugin settings.');
-            $currency = 'RUR'; // Fallback only for backward compatibility
-        }
+        $currency = $this->settings['default_currency'] ?? 'RUR';
         if (!empty($mapping['prices_currency'])) {
             $currency_value = $this->extract_field_value_unified($price_post_id, $mapping['prices_currency'], $mapper_unified, $currency);
             if (!empty($currency_value)) {
@@ -1260,7 +1220,10 @@ class YFGP_Feed_Generator_V2 {
     /**
      * Wrap value into CDATA, escaping nested closing tags.
      */
-    // v4.18.39: wrap_cdata() moved to YFGP_Feed_Generator_Shared_Trait
+    private function wrap_cdata(string $text): string {
+        $safe = str_replace(']]>', ']]]]><![CDATA[>', $text);
+        return '<![CDATA[' . $safe . ']]>';
+    }
     
     /**
      * Extract field value using Unified mapper
@@ -1556,31 +1519,12 @@ class YFGP_Feed_Generator_V2 {
             if ($all_numeric && !empty($raw_rows)) {
                 // Convert IDs to WP_Post objects
                 $target_cpt = isset($block_config['source_cpt']) ? $block_config['source_cpt'] : 'any';
-                
-                // Load Post_Batch_Loader if not already loaded
-                if (!class_exists('YFGP_Post_Batch_Loader')) {
-                    require_once YFGP_PLUGIN_DIR . 'includes/class-post-batch-loader.php';
-                }
-                
-                if (class_exists('YFGP_Post_Batch_Loader')) {
-                    // Use batch loader for safe memory usage
-                    $loader = new YFGP_Post_Batch_Loader($target_cpt, 1000);
-                    $posts = $loader->get_posts_by_ids(
-                        array_map('intval', $raw_rows),
-                        $target_cpt,
-                        'publish'
-                    );
-                } else {
-                    // Fallback: use limited query
-                    $ids = array_map('intval', $raw_rows);
-                    $posts = get_posts(array(
-                        'post__in' => array_slice($ids, 0, 10000), // Limit to 10k
-                        'post_type' => $target_cpt,
-                        'posts_per_page' => 10000,
-                        'orderby' => 'post__in',
-                    ));
-                }
-                
+                $posts = get_posts(array(
+                    'post__in' => array_map('intval', $raw_rows),
+                    'post_type' => $target_cpt,
+                    'posts_per_page' => -1,
+                    'orderby' => 'post__in', // Preserve order from raw_rows
+                ));
                 if (!empty($posts)) {
                     $raw_rows = $posts;
                 }
@@ -2367,7 +2311,7 @@ class YFGP_Feed_Generator_V2 {
                     'speciality' => mb_strtolower($this->normalize_speciality_value($specialization_text, $fallback_spec_text)), // v4.10.8: LOWERCASE according to Yandex docs! v4.18.1: FIX - protect from arrays
                     'price' => $base_service['price'] ?? null, // Price is NOT required!
                     'base_price' => $base_service['price'] ?? null,
-                    'currency' => $this->settings['default_currency'] ?? '', // v4.18.38: No hardcode - must be set in settings
+                    'currency' => $this->settings['default_currency'] ?? 'RUR', // v4.18.2: UNIVERSAL - from settings
                     'discount' => $base_service['price_discount'] ?? null, // v4.5.0: Discount from related prices CPT
                     'discount_name' => $base_service['discount_name'] ?? null, // v4.18.18: Discount name for XML attribute
                     'free_appointment_condition' => $base_service['free_appointment_condition'] ?? null, // v4.18.18: Free appointment condition
@@ -2452,7 +2396,7 @@ class YFGP_Feed_Generator_V2 {
                             'speciality' => $this->normalize_speciality_value($specialization_text, $fallback_spec_text), // v2.3.0: original text! v4.18.1: FIX - protect from arrays
                             'price' => $service['price'] ?? null,
                             'base_price' => $service['price'] ?? null,
-                            'currency' => $this->settings['default_currency'] ?? '', // v4.18.38: No hardcode - must be set in settings
+                            'currency' => $this->settings['default_currency'] ?? 'RUR', // v4.18.2: UNIVERSAL - from settings
                             'discount' => $service['price_discount'] ?? null, // v4.5.0: Discount from related prices CPT
                             'discount_name' => $service['discount_name'] ?? null, // v4.18.18: Discount name for XML attribute
                             'free_appointment_condition' => $service['free_appointment_condition'] ?? null, // v4.18.18: Free appointment condition
@@ -2876,18 +2820,7 @@ class YFGP_Feed_Generator_V2 {
         $speciality_lower = strtolower($speciality);
         $service_name = $speciality_map[$speciality_lower] 
             ?? ($mapping['base_service_default_name'] 
-            ?? ($this->settings['default_service_name'] ?? '')); // v4.18.39: Removed hardcode
-        
-        // v4.18.39: Validate that service name is set
-        if (empty($service_name)) {
-            // Log warning and skip
-            if (class_exists('YFGP_Logger')) {
-                YFGP_Logger::get_instance()->warning('YFGP: Cannot create base service - default_service_name is not set');
-            } else {
-                error_log('YFGP: Cannot create base service - default_service_name is not set');
-            }
-            return null;
-        }
+            ?? ($this->settings['default_service_name'] ?? 'Первичный приём')); // v4.17.0: FIX #5 - add settings check
         
         // v4.4.1: Clean auto-created service ID (ONLY numeric, NO SLUG!)
         // Format: service_auto_DOCTOR_ID (Yandex requires numeric IDs)
@@ -2925,6 +2858,23 @@ class YFGP_Feed_Generator_V2 {
         return $auto_service;
     }
     
+    /**
+     * Deprecated method - kept for backward compatibility
+     * @deprecated v2.3.0 Use determine_base_service()
+     * @deprecated v3.5.3 Parameters changed, this method no longer works correctly!
+     */
+    private function find_base_service(array $services, string $specialization, array $specialties_no_primary): ?array {
+        // v3.5.3: WARNING! This method is deprecated and works with limitations
+        // New method requires $doctor_data and &$global_services
+        $mapping = get_option('yfgp_field_mapping_v3', array());
+        $dummy_doctor_data = array('post_id' => 0); // Placeholder
+        $dummy_global_services = array(); // Local variable (auto-creation doesn't work!)
+        
+        error_log('YFGP v3.5.3: WARNING - find_base_service is deprecated, use determine_base_service directly!');
+        
+        return $this->determine_base_service($services, $specialization, $mapping, $dummy_doctor_data, $dummy_global_services);
+    }
+
     /**
      * Get list of specialties without primary appointment
      *
@@ -3051,6 +3001,340 @@ class YFGP_Feed_Generator_V2 {
         return $this->xml_writer->build($doctors, $clinics, $services, $offers);
     }
 
+    private function build_yml_v2(array $doctors, array $clinics, array $services, array $offers): string {
+        // v4.18.1: DEBUG - log offers count
+        error_log('YFGP v4.18.1 DEBUG build_yml_v2: doctors count: ' . count($doctors) . ', clinics count: ' . count($clinics) . ', services count: ' . count($services) . ', offers count: ' . count($offers));
+        $now = current_time('Y-m-d H:i');
+        
+        $yml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+        $yml .= '<shop version="2.0" date="' . $now . '">' . "\n";
+        
+        // Company information
+        $yml .= '  <name>' . $this->escape_xml($this->settings['shop_name'] ?? get_bloginfo('name')) . '</name>' . "\n";
+        $yml .= '  <company>' . $this->escape_xml($this->settings['company_name'] ?? get_bloginfo('name')) . '</company>' . "\n";
+        $yml .= '  <url>' . $this->escape_xml($this->settings['company_url'] ?? get_site_url()) . '</url>' . "\n";
+        
+        // Shop logo (v4.18.1: required field per Yandex specification)
+        $mapping = get_option('yfgp_field_mapping_v3', array());
+        $shop_picture = $mapping['shop_picture'] ?? $this->settings['shop_picture'] ?? null;
+        
+        // v4.18.1: Fallback - use site icon if not specified
+        if (empty($shop_picture)) {
+            $shop_picture = get_site_icon_url(512); // Get site icon (512x512)
+            if (empty($shop_picture)) {
+                // If site icon is also empty - warning in log
+                error_log('YFGP v4.18.1: Warning - shop_picture is empty, using empty string (field is required by Yandex spec)');
+                $shop_picture = ''; // Empty string, but field will be present in XML
+            } else {
+                error_log('YFGP v4.18.1: Info - shop_picture not set, using site icon: ' . $shop_picture);
+            }
+        }
+        
+        // v4.18.1: Required field, always generate
+        $yml .= '  <picture>' . $this->escape_xml($shop_picture) . '</picture>' . "\n";
+        
+        // Email for inquiries (optional)
+        if (!empty($this->settings['company_email'])) {
+            $yml .= '  <email>' . $this->escape_xml($this->settings['company_email']) . '</email>' . "\n";
+        }
+        
+        // Doctors block
+        $yml .= '  <doctors>' . "\n";
+        foreach ($doctors as $doctor) {
+            $yml .= $this->build_doctor_xml($doctor);
+        }
+        $yml .= '  </doctors>' . "\n";
+        
+        // Clinics block
+        $yml .= '  <clinics>' . "\n";
+        foreach ($clinics as $clinic) {
+            $yml .= $this->build_clinic_xml($clinic);
+        }
+        $yml .= '  </clinics>' . "\n";
+        
+        // Services block
+        $yml .= '  <services>' . "\n";
+        foreach ($services as $service) {
+            $yml .= $this->build_service_xml($service);
+        }
+        $yml .= '  </services>' . "\n";
+        
+        // Offers block
+        $yml .= '  <offers>' . "\n";
+        foreach ($offers as $offer) {
+            $yml .= $this->build_offer_xml($offer);
+        }
+        $yml .= '  </offers>' . "\n";
+        
+        $yml .= '</shop>' . "\n";
+        
+        return $yml;
+    }
+
+    /**
+     * Build doctor XML
+     *
+     * @param array<string, mixed> $doctor Doctor data
+     * @return string XML representation of doctor
+     */
+    private function build_doctor_xml(array $doctor): string {
+        $xml = '    <doctor id="' . $this->escape_xml($doctor['id']) . '">' . "\n";
+        $xml .= '      <name>' . $this->escape_xml($doctor['name']) . '</name>' . "\n";
+        $xml .= '      <url>' . $this->escape_xml($doctor['url']) . '</url>' . "\n";
+        $xml .= '      <internal_id>' . $this->escape_xml($doctor['internal_id']) . '</internal_id>' . "\n";
+        
+        if (!empty($doctor['description'])) {
+            // v4.1.0-beta31: Strip HTML tags from description (Yandex doesn't accept HTML!)
+            $clean_description = strip_tags($doctor['description']);
+            $xml .= '      <description>' . $this->escape_xml(substr($clean_description, 0, 500)) . '</description>' . "\n";
+        }
+        
+        if (!empty($doctor['surname'])) {
+            $xml .= '      <surname>' . $this->escape_xml($doctor['surname']) . '</surname>' . "\n";
+        }
+        
+        if (!empty($doctor['first_name'])) {
+            $xml .= '      <first_name>' . $this->escape_xml($doctor['first_name']) . '</first_name>' . "\n";
+        }
+        
+        if (!empty($doctor['patronymic'])) {
+            $xml .= '      <patronymic>' . $this->escape_xml($doctor['patronymic']) . '</patronymic>' . "\n";
+        }
+        
+        // v4.18.21: experience_years - выводим только если не пустой и не равен '0'
+        if (isset($doctor['experience_years']) && $doctor['experience_years'] !== '' && $doctor['experience_years'] !== '0') {
+            $xml .= '      <experience_years>' . $this->escape_xml($doctor['experience_years']) . '</experience_years>' . "\n";
+        }
+        
+        if (!empty($doctor['picture'])) {
+            $xml .= '      <picture>' . $this->escape_xml($doctor['picture']) . '</picture>' . "\n";
+        }
+        
+        // New fields v2.3.0
+        if (!empty($doctor['career_start_date'])) {
+            $xml .= '      <career_start_date>' . $this->escape_xml($doctor['career_start_date']) . '</career_start_date>' . "\n";
+        }
+        
+        if (!empty($doctor['degree'])) {
+            $xml .= '      <degree>' . $this->escape_xml($doctor['degree']) . '</degree>' . "\n";
+        }
+        
+        if (!empty($doctor['rank'])) {
+            $xml .= '      <rank>' . $this->escape_xml($doctor['rank']) . '</rank>' . "\n";
+        }
+        
+        if (!empty($doctor['category'])) {
+            $xml .= '      <category>' . $this->escape_xml($doctor['category']) . '</category>' . "\n";
+        }
+        
+        if (!empty($doctor['reviews_total_count'])) {
+            $xml .= '      <reviews_total_count>' . $this->escape_xml($doctor['reviews_total_count']) . '</reviews_total_count>' . "\n";
+        }
+        
+        // Offer-level availability flags (house_call/telemed) выводятся только внутри <offer>
+        // поэтому не дублируем их в блоке <doctor>, чтобы не нарушать спецификацию Яндекса.
+        
+        // Complex fields DOCTOR
+        if (!empty($doctor['education'])) {
+            $xml .= $this->build_education_xml($doctor['education']);
+        }
+        
+        if (!empty($doctor['job'])) {
+            $xml .= $this->build_job_xml($doctor['job']);
+        }
+        
+        if (!empty($doctor['certificate'])) {
+            $xml .= $this->build_certificate_xml($doctor['certificate']);
+        }
+        
+        if (!empty($doctor['reviews'])) {
+            $xml .= $this->build_reviews_xml($doctor['reviews']);
+        }
+        
+        $xml .= '    </doctor>' . "\n";
+        return $xml;
+    }
+
+    /**
+     * Build clinic XML
+     *
+     * @param array<string, mixed> $clinic Clinic data
+     * @return string XML representation of clinic
+     */
+    private function build_clinic_xml(array $clinic): string {
+        $xml = '    <clinic id="' . $this->escape_xml($clinic['id']) . '">' . "\n";
+        $xml .= '      <name>' . $this->escape_xml($clinic['name']) . '</name>' . "\n";
+        $xml .= '      <url>' . $this->escape_xml($clinic['url']) . '</url>' . "\n";
+        $xml .= '      <internal_id>' . $this->escape_xml($clinic['internal_id']) . '</internal_id>' . "\n";
+        
+        if (!empty($clinic['city'])) {
+            $xml .= '      <city>' . $this->escape_xml($clinic['city']) . '</city>' . "\n";
+        }
+        
+        if (!empty($clinic['address'])) {
+            $xml .= '      <address>' . $this->escape_xml($clinic['address']) . '</address>' . "\n";
+        }
+        
+        if (!empty($clinic['phone'])) {
+            $xml .= '      <phone>' . $this->escape_xml($clinic['phone']) . '</phone>' . "\n";
+        }
+        
+        if (!empty($clinic['email'])) {
+            $xml .= '      <email>' . $this->escape_xml($clinic['email']) . '</email>' . "\n";
+        }
+        
+        // New fields v2.3.0
+        if (!empty($clinic['picture'])) {
+            $xml .= '      <picture>' . $this->escape_xml($clinic['picture']) . '</picture>' . "\n";
+        }
+        
+        if (!empty($clinic['company_id'])) {
+            $xml .= '      <company_id>' . $this->escape_xml($clinic['company_id']) . '</company_id>' . "\n";
+        }
+        
+        $xml .= '    </clinic>' . "\n";
+        return $xml;
+    }
+
+    /**
+     * Build service XML
+     *
+     * @param array<string, mixed> $service Service data
+     * @return string XML representation of service
+     */
+    private function build_service_xml(array $service): string {
+        $xml = '    <service id="' . $this->escape_xml($service['id']) . '">' . "\n";
+        $xml .= '      <name>' . $this->escape_xml($service['name']) . '</name>' . "\n";
+        $xml .= '      <internal_id>' . $this->escape_xml($service['internal_id']) . '</internal_id>' . "\n";
+        
+        if (!empty($service['description'])) {
+            $xml .= '      <description>' . $this->escape_xml($service['description']) . '</description>' . "\n";
+        }
+        
+        // New fields v2.3.0
+        if (!empty($service['gov_id'])) {
+            $xml .= '      <gov_id>' . $this->escape_xml($service['gov_id']) . '</gov_id>' . "\n";
+        }
+        
+        $xml .= '    </service>' . "\n";
+        return $xml;
+    }
+
+    /**
+     * Build offer XML
+     *
+     * @param array<string, mixed> $offer Offer data
+     * @return string XML representation of offer
+     */
+    private function build_offer_xml(array $offer): string {
+        $xml = '    <offer id="' . $this->escape_xml($offer['id']) . '">' . "\n";
+        
+        // URL for booking
+        if (!empty($offer['appointment_url'])) {
+            $xml .= '      <url>' . $this->escape_xml($offer['appointment_url']) . '</url>' . "\n";
+        }
+        
+        // Online scheduling and booking
+        if (isset($offer['online_schedule'])) {
+            $value = ($offer['online_schedule'] === 'true' || $offer['online_schedule'] === true) ? 'true' : 'false';
+            $xml .= '      <online_schedule>' . $value . '</online_schedule>' . "\n";
+        }
+        
+        if (isset($offer['appointment_available'])) {
+            $value = ($offer['appointment_available'] === 'true' || $offer['appointment_available'] === true) ? 'true' : 'false';
+            $xml .= '      <appointment>' . $value . '</appointment>' . "\n";
+        }
+        
+        // OMS
+        if (isset($offer['oms_available'])) {
+            $value = ($offer['oms_available'] === 'true' || $offer['oms_available'] === true) ? 'true' : 'false';
+            $xml .= '      <oms>' . $value . '</oms>' . "\n";
+        }
+        
+        // Price
+        // v4.18.1: FIX - use base_price instead of price, per specification if price is present, then base_price and currency are required
+        $base_price = $offer['base_price'] ?? $offer['price'] ?? null;
+        $currency = $offer['currency'] ?? $this->settings['default_currency'] ?? 'RUR';
+        
+        if ($base_price !== null && $base_price !== '') {
+            $xml .= '      <price>' . "\n";
+            $xml .= '        <base_price>' . $this->escape_xml($base_price) . '</base_price>' . "\n";
+            $xml .= '        <currency>' . $this->escape_xml($currency) . '</currency>' . "\n";
+            
+            // v4.18.18: Discount with optional name attribute (per Yandex spec)
+            // v4.18.21: FIX - атрибут name опциональный, выводим <discount> без name если discount_name пустой
+            // v4.18.21: free_appointment выводим ТОЛЬКО если есть <discount> (по документации Яндекс)
+            $has_discount = false;
+            if (!empty($offer['discount'])) {
+                $discount_attr = '';
+                if (!empty($offer['discount_name'])) {
+                    $discount_attr = ' name="' . $this->escape_xml($offer['discount_name']) . '"';
+                }
+                $xml .= '        <discount' . $discount_attr . '>' . $this->escape_xml($offer['discount']) . '</discount>' . "\n";
+                $has_discount = true;
+            }
+            
+            // Условие бесплатного приема
+            // v4.18.21: Выводим free_appointment ТОЛЬКО если есть <discount> (по документации Яндекс)
+            if ($has_discount && !empty($offer['free_appointment_condition'])) {
+                $free_appointment_text = $this->normalize_free_appointment_text($offer['free_appointment_condition'], $offer['discount_name'] ?? null);
+                if ($free_appointment_text !== '') {
+                    $xml .= '        <free_appointment>' . $this->escape_xml($free_appointment_text) . '</free_appointment>' . "\n";
+                }
+            }
+            
+            $xml .= '      </price>' . "\n";
+        } elseif (($offer['price'] ?? null) !== null || ($offer['base_price'] ?? null) !== null) {
+            // v4.18.1: Валидация - если price/base_price указан, но пустой, предупреждение в лог
+            error_log('YFGP v4.18.1: Warning - price/base_price is empty for offer ' . ($offer['id'] ?? 'unknown'));
+        }
+        
+        // Ссылка на услугу
+        $xml .= '      <service id="' . $this->escape_xml($offer['service_id']) . '"/>' . "\n";
+        
+        // Клиника с врачом
+        $xml .= '      <clinic id="' . $this->escape_xml($offer['clinic_id']) . '">' . "\n";
+        $xml .= '        <doctor id="' . $this->escape_xml($offer['doctor_id']) . '">' . "\n";
+        $xml .= '          <speciality>' . $this->escape_xml($this->get_speciality_label($offer['speciality'])) . '</speciality>' . "\n";
+        
+        // Appointment types
+        // v4.18.21: DEBUG - log what comes into build_offer_xml
+        error_log("YFGP v4.18.21 DEBUG build_offer_xml: offer_id = " . ($offer['id'] ?? 'unknown') . ", adult_appointment = " . var_export($offer['adult_appointment'] ?? 'NOT SET', true) . ", children_appointment = " . var_export($offer['children_appointment'] ?? 'NOT SET', true));
+        
+        if (isset($offer['children_appointment'])) {
+            $value = ($offer['children_appointment'] === 'true' || $offer['children_appointment'] === true) ? 'true' : 'false';
+            $xml .= '          <children_appointment>' . $value . '</children_appointment>' . "\n";
+            // v4.18.21: DEBUG - логируем что выводится в XML
+            error_log("YFGP v4.18.21 DEBUG build_offer_xml: Writing children_appointment = '$value' for offer " . ($offer['id'] ?? 'unknown'));
+        }
+        
+        if (isset($offer['adult_appointment'])) {
+            $value = ($offer['adult_appointment'] === 'true' || $offer['adult_appointment'] === true) ? 'true' : 'false';
+            $xml .= '          <adult_appointment>' . $value . '</adult_appointment>' . "\n";
+            // v4.18.21: DEBUG - логируем что выводится в XML
+            error_log("YFGP v4.18.21 DEBUG build_offer_xml: Writing adult_appointment = '$value' for offer " . ($offer['id'] ?? 'unknown'));
+        }
+        
+        if (isset($offer['house_call'])) {
+            $value = ($offer['house_call'] === 'true' || $offer['house_call'] === true) ? 'true' : 'false';
+            $xml .= '          <house_call>' . $value . '</house_call>' . "\n";
+        }
+        
+        if (isset($offer['telemed'])) {
+            $value = ($offer['telemed'] === 'true' || $offer['telemed'] === true) ? 'true' : 'false';
+            $xml .= '          <telemed>' . $value . '</telemed>' . "\n";
+        }
+        
+        // Base service
+        $xml .= '          <is_base_service>' . ($offer['is_base_service'] ? 'true' : 'false') . '</is_base_service>' . "\n";
+        
+        $xml .= '        </doctor>' . "\n";
+        $xml .= '      </clinic>' . "\n";
+        
+        $xml .= '    </offer>' . "\n";
+        return $xml;
+    }
+
     /**
      * Escape XML
      */
@@ -3165,6 +3449,23 @@ class YFGP_Feed_Generator_V2 {
             }
         }
         
+        return null;
+    }
+    
+    /**
+     * Deprecated method v2.2.0 - no longer used
+     * @deprecated v2.3.0 Base service now created automatically via determine_base_service()
+     */
+    private function handle_no_services($post, array $data, array $mapping, array &$offers, int $doctor_id, array $clinics): void {
+        // Method deprecated - base service now created automatically in build_offers_v2()
+    }
+    
+    /**
+     * Deprecated method v2.2.0 - no longer used
+     * @deprecated v2.3.0 Price is not required for base service
+     */
+    private function find_any_service_with_price(array $services): ?array {
+        // Method deprecated - price is not required for base service
         return null;
     }
     
@@ -3290,6 +3591,50 @@ class YFGP_Feed_Generator_V2 {
     }
     
     /**
+     * Check service suitability for primary appointment (REMOVED METHOD)
+     * v2.4.0: Improved logic for base service selection
+     * 
+     * @deprecated v2.3.1: Simple heuristic for base service - without extended primary appointment check
+     * Method is_service_suitable_for_primary removed in this version
+     * 
+     * @param string $service_name Service name
+     * @param string $speciality Doctor specialty
+     * @return bool True if service is suitable
+     */
+    private function is_service_suitable_for_primary_removed(string $service_name, string $speciality): bool {
+        $service_lower = mb_strtolower($service_name);
+        $speciality_lower = mb_strtolower($speciality);
+        
+        // Exclusions for specialties without primary appointments
+        $no_primary_specialities = array(
+            '╤Г╨╖╨╕', '╤А╨╡╨╜╤В╨│╨╡╨╜', '╨╗╨░╨▒╨╛╤А╨░╤В╨╛╤А╨╕╤П', '╨░╨╜╨░╨╗╨╕╨╖╤Л', '╨┤╨╕╨░╨│╨╜╨╛╤Б╤В╨╕╨║╨░',
+            '╨╝╨░╤Б╤Б╨░╨╢', '╤Д╨╕╨╖╨╕╨╛╤В╨╡╤А╨░╨┐╨╕╤П', '╤А╨╡╨░╨▒╨╕╨╗╨╕╤В╨░╤Ж╨╕╤П'
+        );
+        
+        // If specialty is in exclusion list - any service is suitable
+        foreach ($no_primary_specialities as $excluded) {
+            if (mb_stripos($speciality_lower, $excluded) !== false) {
+                return true;
+            }
+        }
+        
+        // Keywords for primary appointment
+        $primary_keywords = array(
+            'первичн', 'консульт', 'осмотр', 'приём', 'диагност',
+            'обследова', 'консультация', 'осмотр врач'
+        );
+        
+        // Check for presence of keywords
+        foreach ($primary_keywords as $keyword) {
+            if (mb_stripos($service_lower, $keyword) !== false) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
      * Build XML for doctor education
      * v2.4.0: New method for complex fields
      * v4.1.0-beta30: Updated to match Yandex.Health YML v2.0 spec
@@ -3384,7 +3729,27 @@ class YFGP_Feed_Generator_V2 {
      * @return string Transliterated text
      * @since 3.2.2
      */
-    // v4.18.39: transliterate_russian() moved to YFGP_Feed_Generator_Shared_Trait
+    private function transliterate_russian(string $text): string {
+        // Full transliteration table for Cyrillic
+        $transliteration = array(
+            'а' => 'a',    'б' => 'b',    'в' => 'v',    'г' => 'g',    'д' => 'd',
+            'е' => 'e',    'ё' => 'yo',   'ж' => 'zh',   'з' => 'z',    'и' => 'i',
+            'й' => 'y',    'к' => 'k',    'л' => 'l',    'м' => 'm',    'н' => 'n',
+            'о' => 'o',    'п' => 'p',    'р' => 'r',    'с' => 's',    'т' => 't',
+            'у' => 'u',    'ф' => 'f',    'х' => 'h',    'ц' => 'ts',   'ч' => 'ch',
+            'ш' => 'sh',   'щ' => 'sch',  'ъ' => '',     'ы' => 'y',    'ь' => '',
+            'э' => 'e',    'ю' => 'yu',   'я' => 'ya',
+            'А' => 'A',    'Б' => 'B',    'В' => 'V',    'Г' => 'G',    'Д' => 'D',
+            'Е' => 'E',    'Ё' => 'Yo',   'Ж' => 'Zh',   'З' => 'Z',    'И' => 'I',
+            'Й' => 'Y',    'К' => 'K',    'Л' => 'L',    'М' => 'M',    'Н' => 'N',
+            'О' => 'O',    'П' => 'P',    'Р' => 'R',    'С' => 'S',    'Т' => 'T',
+            'У' => 'U',    'Ф' => 'F',    'Х' => 'H',    'Ц' => 'Ts',   'Ч' => 'Ch',
+            'Ш' => 'Sh',   'Щ' => 'Sch',  'Ъ' => '',     'Ы' => 'Y',    'Ь' => '',
+            'Э' => 'E',    'Ю' => 'Yu',   'Я' => 'Ya',
+        );
+        
+        return strtr($text, $transliteration);
+    }
     
     /**
      * Build XML for doctor reviews
@@ -3670,6 +4035,21 @@ class YFGP_Feed_Generator_V2 {
         return null;
     }
 
-    // v4.18.39: v3_is_assoc() and v3_is_truthy() moved to YFGP_Feed_Generator_Shared_Trait
+    private function v3_is_assoc(array $array): bool {
+        return array_keys($array) !== range(0, count($array) - 1);
+    }
+
+    private function v3_is_truthy($value): bool {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            return !in_array($normalized, array('', '0', 'false', 'off', 'no'), true);
+        }
+
+        return !empty($value);
+    }
 }
 

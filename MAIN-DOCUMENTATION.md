@@ -22,7 +22,6 @@
 - **Gemini MCP (Smart Tool Intelligence):** локальный сервер `tools/gemini-mcp-server-3` на базе Gemini 3 (чат, генерация/редактирование изображений, транскрипция аудио, анализ видео/изображений, выполнение кода). Конфиг `~/.cursor/mcp.json`: `"gemini-mcp": { "type": "stdio", "command": "node", "args": ["D:/feed/tools/gemini-mcp-server-3/gemini-server.js"], "env": { "GEMINI_API_KEY": "<SET_GEMINI_API_KEY>" } }`. Перед использованием выполните `npm install` в каталоге сервера и получите ключ в Google AI Studio.
 - **Sentry SDK:** интегрирован `sentry/sentry` (v4.0+) для production мониторинга. Класс `YFGP_Sentry_Integration` (`includes/class-sentry-integration.php`) инициализируется на хуке `init`, интегрирован с `YFGP_Error_Handler`. Настройки в админке: `sentry_enabled`, `sentry_dsn`, `sentry_traces_sample_rate`. Документация: `SENTRY-INSTALLATION.md`.
 - **GitHub (public release):** https://github.com/lutyi2856/feed-yandex-generator (`main`). Локальный `.git` живёт в `wp-content/plugins/yandex-feed-generator-pro-v2/`; синхронизируем production-структуру (исключаем `dev-artifacts/`, `vendor/`, `.phpunit.cache/`, backup/temp файлы по `.gitignore`). Источник правды — контейнер `wp` (порт 8000), собранный код пушим только после `Sync-Plugin-From-Container`.
-- **[PLUGIN-STRUCTURE-AND-CODE-REPORT.md](../../PLUGIN-STRUCTURE-AND-CODE-REPORT.md):** единый отчёт со структурой директорий и полным содержимым всех PHP/JS/CSS файлов; обновляйте его сразу после любых правок кода.
 
 ---
 

@@ -27,6 +27,12 @@ class YFGP_Field_Mapper_Unified {
     private static $instance = null;
     
     /**
+     * Кэш результатов для производительности
+     * 
+     * @deprecated v4.18.17 Используется CacheManager вместо локального массива
+     */
+    private $cache = array();
+    /**
      * Cached post meta values per post to avoid repeated DB lookups.
      *
      * @var array<int, array<string, array<int, mixed>>>
@@ -170,21 +176,7 @@ class YFGP_Field_Mapper_Unified {
      * @param string $post_type Тип поста
      * @return array<string, mixed> Массив доступных полей
      */
-    public function getAvailableFields($post_type = null): array {
-        // v4.18.39: Get default post type from settings
-        if (empty($post_type)) {
-            $settings = get_option('yfgp_settings', array());
-            $post_type = $settings['cpt_doctors'] ?? null;
-            
-            if (empty($post_type)) {
-                // Fallback: get first public post type
-                $public_types = get_post_types(array('public' => true), 'names');
-                $excluded = array('attachment', 'revision', 'nav_menu_item');
-                $allowed = array_diff($public_types, $excluded);
-                $post_type = !empty($allowed) ? reset($allowed) : 'post';
-            }
-        }
-        
+    public function getAvailableFields($post_type = 'doctors'): array {
         // Используем ЛУЧШУЮ реализацию из V3 (более полная)
         
         $fields = array(
