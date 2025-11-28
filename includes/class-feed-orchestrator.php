@@ -74,34 +74,11 @@ class YFGP_Feed_Orchestrator {
      * 
      * Координирует: WP_Query цикл → сбор сущностей → сериализация XML
      * 
-     * @param string|null $post_type Тип постов для генерации (default: from settings)
+     * @param string $post_type Тип постов для генерации (default: 'doctors')
      * @return string XML строка фида
      * @throws Exception Если нет постов для генерации
      */
-    public function orchestrate(?string $post_type = null): string {
-        // v4.18.39: Get default post type from settings
-        if (empty($post_type)) {
-            $post_type = $this->settings['cpt_doctors'] ?? null;
-            
-            if (empty($post_type)) {
-                // Fallback: get first public post type
-                $public_types = get_post_types(array('public' => true), 'names');
-                $excluded = array('attachment', 'revision', 'nav_menu_item');
-                $allowed = array_diff($public_types, $excluded);
-                $post_type = !empty($allowed) ? reset($allowed) : 'post';
-            }
-        }
-        // v4.18.39: Clear cache before feed generation
-        if (class_exists('YFGP_Cache_Manager')) {
-            $cache_manager = YFGP_Cache_Manager::get_instance();
-            $cache_manager->invalidate();
-        }
-        
-        // Also clear relationship cache
-        if (class_exists('YFGP_Relationship_Helper')) {
-            YFGP_Relationship_Helper::clear_relationship_cache();
-        }
-        
+    public function orchestrate(string $post_type = 'doctors'): string {
         $mapping = get_option('yfgp_field_mapping_v3', array());
         // v4.18.18: Fix PHP 8+ count() error - get_option can return false, ensure array
         if (!is_array($mapping)) {

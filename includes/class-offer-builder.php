@@ -244,7 +244,7 @@ class YFGP_Offer_Builder {
                 // Собираем данные оффера
                 $base_price_value = $base_service['price'] ?? null;
                 $currency_value = $base_price_value !== null && $base_price_value !== ''
-                    ? ($base_service['currency'] ?? ($this->settings['default_currency'] ?? ''))
+                    ? ($base_service['currency'] ?? ($this->settings['default_currency'] ?? 'RUR'))
                     : null;
                 $discount_value = $base_service['price_discount'] ?? null;
                 $discount_name_value = (!empty($discount_value) && !empty($base_service['discount_name']))
@@ -350,7 +350,7 @@ class YFGP_Offer_Builder {
 
                         $service_price_value = $service['price'] ?? null;
                         $service_currency_value = $service_price_value !== null && $service_price_value !== ''
-                            ? ($service['currency'] ?? ($this->settings['default_currency'] ?? ''))
+                            ? ($service['currency'] ?? ($this->settings['default_currency'] ?? 'RUR'))
                             : null;
                         $service_discount_value = $service['price_discount'] ?? null;
                         $service_discount_name_value = (!empty($service_discount_value) && !empty($service['discount_name']))

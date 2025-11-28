@@ -21,15 +21,10 @@ class YFGP_Post_Batch_Loader {
     /**
      * Constructor
      * 
-     * @param string|null $post_type Post type to load (default: from settings)
+     * @param string $post_type Post type to load
      * @param int $batch_size Batch size (default 1000)
      */
-    public function __construct($post_type = null, $batch_size = 1000) {
-        // v4.18.39: Get default post type from settings if not provided
-        if (empty($post_type)) {
-            $settings = get_option('yfgp_settings', array());
-            $post_type = $settings['cpt_doctors'] ?? 'post';
-        }
+    public function __construct($post_type = 'doctors', $batch_size = 1000) {
         $this->post_type = $post_type;
         
         // Use Constants if available

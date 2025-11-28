@@ -15,14 +15,15 @@ if (!defined('ABSPATH')) {
 
 class YFGP_Constants {
     
-    // v4.18.39: Post type constants removed - use dynamic get_post_types() instead
+    // Post Types
+    const POST_TYPE_DOCTORS = 'doctors';
+    const POST_TYPE_CLINICS = 'clinics';
+    const POST_TYPE_SERVICES = 'services';
     
     // Default Values
-    // v4.18.38: DEFAULT_CURRENCY removed - currency must be set in settings (Yandex supports only RUR/RUB)
+    const DEFAULT_POST_TYPE = 'doctors';
+    const DEFAULT_CURRENCY = 'RUR';
     const DEFAULT_BATCH_SIZE = 1000;
-    
-    // Allowed Currency Values (Yandex.Health specification)
-    const ALLOWED_CURRENCIES = array('RUR', 'RUB');
     
     // Limits
     const MAX_FEED_SIZE = 52428800; // 50MB in bytes

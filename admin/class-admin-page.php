@@ -277,10 +277,8 @@ class YFGP_Admin_Page {
                 'cpt_services' => sanitize_text_field($_POST['cpt_services'] ?? 'services'),
                 // 'cpt_reviews' removed - using source_reviews + source_reviews_cpt instead
                 // v2.4.1: Настройки валюты
-                // v4.18.38: Validate currency - only RUR/RUB allowed (Yandex.Health specification)
-                'default_currency' => $this->validate_currency(sanitize_text_field($_POST['default_currency'] ?? '')),
-                'default_service_name' => sanitize_text_field(wp_unslash($_POST['default_service_name'] ?? '')),
-                // v4.18.39: Validate that service name is set
+                'default_currency' => sanitize_text_field($_POST['default_currency'] ?? 'RUR'),
+                'default_service_name' => sanitize_text_field(wp_unslash($_POST['default_service_name'] ?? 'Первичный прием')),
                 // v3.0.0: Источники данных
                 'source_education' => sanitize_text_field($_POST['source_education'] ?? 'repeater'),
                 'source_education_cpt' => sanitize_text_field($_POST['source_education_cpt'] ?? ''),
@@ -308,15 +306,6 @@ class YFGP_Admin_Page {
             $settings = $this->with_normalized_cpts($settings);
             
             update_option('yfgp_settings', $settings);
-            
-            // v4.18.39: Validate that default_service_name is set
-            if (empty($settings['default_service_name'])) {
-                if (class_exists('YFGP_Logger')) {
-                    YFGP_Logger::get_instance()->warning('YFGP: default_service_name is not set in settings');
-                } else {
-                    error_log('YFGP: default_service_name is not set in settings');
-                }
-            }
             
             // Обновление расписания
             $cron = new YFGP_Cron_Manager();
@@ -1630,28 +1619,6 @@ class YFGP_Admin_Page {
         }
 
         return '';
-    }
-
-    /**
-     * Validate currency value according to Yandex.Health specification
-     * 
-     * v4.18.38: Only RUR and RUB are allowed (Yandex.Health supports only rubles)
-     * 
-     * @param string $currency Currency code
-     * @return string Valid currency code (defaults to 'RUR' if invalid)
-     */
-    private function validate_currency(string $currency): string {
-        $allowed = array('RUR', 'RUB');
-        
-        if (empty($currency) || !in_array($currency, $allowed, true)) {
-            // Log warning if invalid currency provided
-            if (!empty($currency)) {
-                error_log('YFGP v4.18.38: Invalid currency "' . $currency . '" provided. Allowed values: ' . implode(', ', $allowed) . '. Using default: RUR');
-            }
-            return 'RUR'; // Default to RUR if invalid or empty
-        }
-        
-        return $currency;
     }
 }
 
