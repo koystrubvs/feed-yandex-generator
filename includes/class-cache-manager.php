@@ -185,6 +185,47 @@ class YFGP_Cache_Manager {
     }
 
     /**
+     * Clear expired entries (v4.18.39: Added method for cleaning expired cache entries)
+     * 
+     * Note: WordPress transients automatically expire, but this method can be used
+     * to manually clean up expired entries from the tracking options.
+     * 
+     * @return int Number of entries cleared
+     */
+    public function clear_expired(): int {
+        $cleared = 0;
+        
+        // WordPress transients automatically expire, but we can clean up tracking options
+        foreach (self::ALLOWED_SCOPES as $scope) {
+            $cache_keys_option = 'yfgp_cache_keys_' . $scope;
+            $keys = get_option($cache_keys_option, array());
+            
+            if (is_array($keys)) {
+                $valid_keys = array();
+                foreach ($keys as $key) {
+                    $transient_key = $this->getTransientKey($scope, $key);
+                    $value = get_transient($transient_key);
+                    if ($value !== false) {
+                        $valid_keys[] = $key;
+                    } else {
+                        $cleared++;
+                    }
+                }
+                
+                if (count($valid_keys) !== count($keys)) {
+                    if (empty($valid_keys)) {
+                        delete_option($cache_keys_option);
+                    } else {
+                        update_option($cache_keys_option, $valid_keys, false);
+                    }
+                }
+            }
+        }
+        
+        return $cleared;
+    }
+    
+    /**
      * Сбросить singleton (для тестирования)
      * 
      * @return void

@@ -180,6 +180,9 @@ class Yandex_Feed_Generator_Pro {
         // v4.18.22: Post Batch Loader (пакетная загрузка постов для предотвращения OOM)
         require_once YFGP_PLUGIN_DIR . 'includes/class-post-batch-loader.php';
 
+        // v4.18.39: Base Service Resolver (определение базовой услуги для врачей)
+        require_once YFGP_PLUGIN_DIR . 'includes/services/class-base-service-resolver.php';
+
         // Только v2 версии классов
 
         require_once YFGP_PLUGIN_DIR . 'includes/class-feed-generator-v2.php';
@@ -194,7 +197,7 @@ class Yandex_Feed_Generator_Pro {
 
         require_once YFGP_PLUGIN_DIR . 'includes/class-migration.php'; // v4.18.0: Migration Manager
 
-        require_once YFGP_PLUGIN_DIR . 'includes/class-error-handler.php'; // v4.18.0: Error Handler
+        require_once YFGP_PLUGIN_DIR . 'includes/class-error-handler.php'; // v4.18.39: Error Handler
 
         // v4.18.21: Sentry Integration для мониторинга ошибок
         // Загружаем Composer autoload для Sentry SDK (если установлен)
@@ -1926,7 +1929,7 @@ class Yandex_Feed_Generator_Pro {
 
                         'price' => 5200, // Example price
 
-                        'currency' => 'RUR'
+                        'currency' => get_option('yfgp_settings', array())['default_currency'] ?? 'RUR' // v4.18.38: Get from settings, fallback for example only
 
                     ),
 

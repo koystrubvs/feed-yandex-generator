@@ -982,7 +982,12 @@ class YFGP_Xml_Serialization_Service {
         $details = array(
             'price' => $selected['value'],
         );
-        $currency = $this->settings['default_currency'] ?? 'RUR';
+        // v4.18.38: No hardcode - currency must be set in settings (Yandex supports only RUR/RUB)
+        $currency = $this->settings['default_currency'] ?? '';
+        if (empty($currency)) {
+            error_log('YFGP v4.18.38: Currency not set in settings. Please configure default_currency in plugin settings.');
+            $currency = 'RUR'; // Fallback only for backward compatibility
+        }
         if (!empty($mapping['prices_currency'])) {
             $currency_value = $this->extract_field_value_unified($price_post_id, $mapping['prices_currency'], $mapper_unified, $currency);
             if (!empty($currency_value)) {
@@ -1285,38 +1290,7 @@ class YFGP_Xml_Serialization_Service {
         return null;
     }
 
-    /**
-     * Проверка является ли массив ассоциативным
-     * 
-     * v4.18.20: Перенесено из Feed_Generator_V2
-     * 
-     * @param array<mixed> $array Массив
-     * @return bool true если ассоциативный
-     */
-    private function v3_is_assoc(array $array): bool {
-        return array_keys($array) !== range(0, count($array) - 1);
-    }
-
-    /**
-     * Проверка является ли значение truthy
-     * 
-     * v4.18.20: Перенесено из Feed_Generator_V2
-     * 
-     * @param mixed $value Значение
-     * @return bool true если truthy
-     */
-    private function v3_is_truthy($value): bool {
-        if (is_bool($value)) {
-            return $value;
-        }
-
-        if (is_string($value)) {
-            $normalized = strtolower(trim($value));
-            return !in_array($normalized, array('', '0', 'false', 'off', 'no'), true);
-        }
-
-        return !empty($value);
-    }
+    // v4.18.39: v3_is_assoc() and v3_is_truthy() moved to YFGP_Feed_Generator_Shared_Trait
 
     /**
      * Развернуть массив значений V3
@@ -1760,12 +1734,31 @@ class YFGP_Xml_Serialization_Service {
             if ($all_numeric && !empty($raw_rows)) {
                 // Преобразуем ID в объекты WP_Post
                 $target_cpt = isset($block_config['source_cpt']) ? $block_config['source_cpt'] : 'any';
-                $posts = get_posts(array(
-                    'post__in' => array_map('intval', $raw_rows),
-                    'post_type' => $target_cpt,
-                    'posts_per_page' => -1,
-                    'orderby' => 'post__in', // Сохраняем порядок из raw_rows
-                ));
+                
+                // Load Post_Batch_Loader if not already loaded
+                if (!class_exists('YFGP_Post_Batch_Loader')) {
+                    require_once YFGP_PLUGIN_DIR . 'includes/class-post-batch-loader.php';
+                }
+                
+                if (class_exists('YFGP_Post_Batch_Loader')) {
+                    // Use batch loader for safe memory usage
+                    $loader = new YFGP_Post_Batch_Loader($target_cpt, 1000);
+                    $posts = $loader->get_posts_by_ids(
+                        array_map('intval', $raw_rows),
+                        $target_cpt,
+                        'publish'
+                    );
+                } else {
+                    // Fallback: use limited query
+                    $ids = array_map('intval', $raw_rows);
+                    $posts = get_posts(array(
+                        'post__in' => array_slice($ids, 0, 10000), // Limit to 10k
+                        'post_type' => $target_cpt,
+                        'posts_per_page' => 10000,
+                        'orderby' => 'post__in',
+                    ));
+                }
+                
                 if (!empty($posts)) {
                     $raw_rows = $posts;
                 }

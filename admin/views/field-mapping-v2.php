@@ -420,8 +420,11 @@ $relation_fields = array(
                         </th>
                         <td>
                             <input type="text" id="base_service_default_name" name="mapping[base_service_default_name]" 
-                                   value="<?php echo esc_attr($current_mapping['base_service_default_name'] ?? 'Первичный приём'); ?>" 
-                                   class="regular-text" placeholder="Первичный приём">
+                                   value="<?php echo esc_attr($current_mapping['base_service_default_name'] ?? ''); ?>" 
+                                   class="regular-text" placeholder="">
+                            <?php if (empty($current_mapping['base_service_default_name'])): ?>
+                            <div class="notice notice-warning inline"><p>Внимание: Название базовой услуги не установлено в настройках плагина.</p></div>
+                            <?php endif; ?>
                             <p class="description">
                                 Название базовой услуги, если не указано в маппинге специальностей<br>
                                 <strong>v2.3.0:</strong> Используется для автоматического создания базовой услуги

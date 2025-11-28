@@ -33,6 +33,13 @@ class YFGP_Relationship_Helper {
     private $batch_cache = array();
     
     /**
+     * Static cache for relationship queries (v4.18.39: Optimized with static cache)
+     * 
+     * @var array<string, array<\WP_Post>>
+     */
+    private static $relationship_cache = array();
+    
+    /**
      * Получить связанные посты по конфигурации
      * 
      * @param int $post_id ID поста
@@ -460,16 +467,25 @@ class YFGP_Relationship_Helper {
     }
     
     /**
-     * Получить все связанные посты с полными данными
+     * Получить все связанные посты с полными данными (v4.18.39: Optimized with caching and batch loading)
      * 
      * @param int $post_id ID поста
      * @param array<string, mixed> $config Конфигурация поля
      * @return array<string, mixed> Массив объектов WP_Post
      */
     public function get_related_posts_full($post_id, $config): array {
+        // Create cache key
+        $cache_key = $this->get_relationship_cache_key($post_id, $config);
+        
+        // Check static cache
+        if (isset(self::$relationship_cache[$cache_key])) {
+            return self::$relationship_cache[$cache_key];
+        }
+        
         $related_ids = $this->get_relationship_data($post_id, $config);
         
         if (empty($related_ids)) {
+            self::$relationship_cache[$cache_key] = array();
             return array();
         }
         
@@ -479,14 +495,47 @@ class YFGP_Relationship_Helper {
         }
         
         // Получить полные объекты постов (batch запрос)
-        $posts = get_posts(array(
-            'post__in' => $related_ids,
-            'post_type' => 'any',
-            'posts_per_page' => -1,
-            'orderby' => 'post__in'
-        ));
+        // Load Post_Batch_Loader if not already loaded
+        if (!class_exists('YFGP_Post_Batch_Loader')) {
+            require_once YFGP_PLUGIN_DIR . 'includes/class-post-batch-loader.php';
+        }
+        
+        $posts = array();
+        if (class_exists('YFGP_Post_Batch_Loader') && !empty($related_ids)) {
+            // Use batch loader for safe memory usage
+            $loader = new YFGP_Post_Batch_Loader('any', 1000);
+            $posts = $loader->get_posts_by_ids(
+                $related_ids,
+                'any',
+                'any'
+            );
+        } else {
+            // Fallback: use limited query
+            $posts = get_posts(array(
+                'post__in' => array_slice($related_ids, 0, 10000), // Limit to 10k
+                'post_type' => 'any',
+                'posts_per_page' => 10000,
+                'orderby' => 'post__in'
+            ));
+        }
+        
+        // Cache result
+        self::$relationship_cache[$cache_key] = $posts;
         
         return $posts;
+    }
+    
+    /**
+     * Get cache key for relationship query (v4.18.39)
+     * 
+     * @param int $post_id Post ID
+     * @param array<string, mixed> $config Relationship configuration
+     * @return string Cache key
+     */
+    private function get_relationship_cache_key(int $post_id, array $config): string {
+        $source_type = $config['source_type'] ?? '';
+        $source_field = $config['source_field'] ?? '';
+        return md5("{$post_id}_{$source_type}_{$source_field}");
     }
     
     /**
@@ -540,10 +589,20 @@ class YFGP_Relationship_Helper {
     }
     
     /**
-     * Очистить кэш
+     * Очистить кэш (v4.18.39: Updated to clear both static and instance cache)
      */
     public function clear_cache(): void {
         $this->cache = array();
         $this->batch_cache = array();
+        self::$relationship_cache = array();
+    }
+    
+    /**
+     * Clear relationship cache (static method for external use) (v4.18.39)
+     * 
+     * @return void
+     */
+    public static function clear_relationship_cache(): void {
+        self::$relationship_cache = array();
     }
 }
