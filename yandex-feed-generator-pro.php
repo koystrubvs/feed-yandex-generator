@@ -8,7 +8,7 @@
 
  * Description: Универсальный генератор YML фидов для Яндекс.Вебмастера с поддержкой ACF и JetEngine
 
- * Version: 4.18.37
+ * Version: 4.18.50
 
  * Author: Vityaz Development Team
 
@@ -36,7 +36,7 @@ if (!defined('ABSPATH')) {
 
 // Константы плагина
 
-define('YFGP_VERSION', '4.18.49'); // v4.18.49: FIX - price blocks now output correctly in all offers (isset check instead of !empty)
+define('YFGP_VERSION', '4.18.50'); // v4.18.50: FIX - Priority 4 (first service) не создаёт офферы в strict режиме
 
 if (!defined('YFGP_PLUGIN_DIR')) {
 

@@ -2718,6 +2718,7 @@ class YFGP_Feed_Generator_V2 {
         }
         
         // Priority 4: If services exist - take first service from list (by order in UI)
+        // v4.18.50 FIX: В строгом режиме Priority 4 не должен создавать офферы
         if (!empty($services)) {
             // v4.5.0 FIX: Filter out auto-created services (they have no real price!)
             $real_services = array_filter($services, function($service) {
@@ -2725,6 +2726,12 @@ class YFGP_Feed_Generator_V2 {
             });
             
             if (!empty($real_services)) {
+                // v4.18.50 FIX: В строгом режиме Priority 4 не создаёт офферы
+                if ($base_service_mode === 'strict') {
+                    error_log('YFGP v4.18.50: Strict mode - Priority 4 (first service) not allowed, skipping offer creation');
+                    return null; // Не создаём оффер в strict режиме
+                }
+                
                 // v4.18.22 FIX: Выбираем ПЕРВУЮ услугу из списка (по порядку в UI), а не с discount
                 // Порядок услуг соответствует порядку в UI (lawyer_uslyga_acf)
                 $first_service = reset($real_services);
@@ -2732,7 +2739,12 @@ class YFGP_Feed_Generator_V2 {
                 return $first_service;
             }
             
-            // If ONLY auto-created services exist, use first one
+            // If ONLY auto-created services exist, use first one (only for automatic mode)
+            if ($base_service_mode === 'strict') {
+                error_log('YFGP v4.18.50: Strict mode - Only auto-created services available, skipping offer creation');
+                return null;
+            }
+            
             error_log('YFGP v3.5.3: Only auto-created services available, using first');
             return reset($services);
         }
