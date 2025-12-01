@@ -11,6 +11,20 @@ dev-artifacts/
 # Test/debug scripts (temporary development tools)
 scripts/
 
+# Development folders
+memory-bank/
+tests/
+tools/
+
+# Test files
+test-*.php
+
+# Development configs
+phpstan.neon
+phpunit.xml
+phpunit-integration.xml
+project.json
+
 # Vendor dependencies (installed via composer)
 vendor/
 
@@ -19,6 +33,7 @@ vendor/
 *.backup
 *.original
 *.tmp
+*.container-backup
 
 # Temporary files
 *.swp
