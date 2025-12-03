@@ -1864,23 +1864,63 @@ class YFGP_Admin_Page {
         }
         // Для meta_field (checkbox, select multiple и т.д.) - Unified Field Mapper возвращает массив значений
         elseif ($source_type === 'meta_field') {
+            // v4.20.2: Получить choices из конфигурации поля для получения меток
+            $field_name = $config['source_field'] ?? '';
+            $field_options = array();
+            
+            // Получить Unified Field Mapper для доступа к choices
+            if (!class_exists('YFGP_Field_Mapper_Unified')) {
+                require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
+            }
+            $mapper = YFGP_Field_Mapper_Unified::get_instance();
+            
+            // Попробовать получить choices из ACF
+            if (function_exists('acf_get_field') && !empty($field_name)) {
+                $acf_field = acf_get_field($field_name);
+                if ($acf_field && isset($acf_field['choices']) && is_array($acf_field['choices'])) {
+                    $field_options = $acf_field['choices'];
+                }
+            }
+            
+            // Если не нашли в ACF, попробовать JetEngine
+            if (empty($field_options) && class_exists('Jet_Engine') && !empty($field_name)) {
+                $settings = get_option('yfgp_settings', array());
+                $post_type = $settings['post_type'] ?? 'doctors';
+                $field_options = $mapper->getJetengineFieldOptions($field_name, $post_type);
+            }
+            
             // Если это массив значений
             if (is_array($raw_value)) {
                 foreach ($raw_value as $value) {
+                    // v4.20.2: Фильтровать false значения - они не должны быть в списке
+                    if ($value === false || $value === null || $value === '' || $value === 'false' || $value === '0') {
+                        continue;
+                    }
+                    
                     if (is_string($value) || is_numeric($value)) {
-                        // Использовать значение как slug и text
+                        // Получить метку из choices, если доступна
+                        $label = $field_options[$value] ?? $value;
+                        
+                        // Использовать значение как slug и метку как text
                         $slug = is_string($value) ? sanitize_title($value) : (string)$value;
                         $specializations[] = array(
                             'slug' => $slug,
-                            'text' => is_string($value) ? $value : (string)$value,
+                            'text' => is_string($label) ? $label : (string)$value,
                         );
                     } elseif (is_array($value) && isset($value['value'])) {
                         // Если это структурированный массив с ключом 'value'
-                        $slug = is_string($value['value']) ? sanitize_title($value['value']) : (string)$value['value'];
-                        $text = $value['label'] ?? $value['value'] ?? $slug;
+                        $value_key = $value['value'];
+                        
+                        // Фильтровать false значения
+                        if ($value_key === false || $value_key === null || $value_key === '' || $value_key === 'false') {
+                            continue;
+                        }
+                        
+                        $slug = is_string($value_key) ? sanitize_title($value_key) : (string)$value_key;
+                        $text = $value['label'] ?? $field_options[$value_key] ?? $value_key ?? $slug;
                         $specializations[] = array(
                             'slug' => $slug,
-                            'text' => $text,
+                            'text' => is_string($text) ? $text : (string)$slug,
                         );
                     }
                 }
@@ -1891,11 +1931,19 @@ class YFGP_Admin_Page {
                 $parsed = maybe_unserialize($raw_value);
                 if (is_array($parsed)) {
                     foreach ($parsed as $value) {
+                        // v4.20.2: Фильтровать false значения
+                        if ($value === false || $value === null || $value === '' || $value === 'false' || $value === '0') {
+                            continue;
+                        }
+                        
                         if (is_string($value) || is_numeric($value)) {
+                            // Получить метку из choices, если доступна
+                            $label = $field_options[$value] ?? $value;
+                            
                             $slug = is_string($value) ? sanitize_title($value) : (string)$value;
                             $specializations[] = array(
                                 'slug' => $slug,
-                                'text' => is_string($value) ? $value : (string)$value,
+                                'text' => is_string($label) ? $label : (string)$value,
                             );
                         }
                     }
