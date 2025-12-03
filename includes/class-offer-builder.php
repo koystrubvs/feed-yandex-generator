@@ -41,6 +41,12 @@ class YFGP_Offer_Builder {
     private $get_offer_additional_fields_callback;
 
     /**
+     * @var callable|null
+     * @since 4.19.3 - Callback для получения ручных настроек базовой услуги
+     */
+    private $get_manual_base_service_callback = null;
+
+    /**
      * Constructor
      *
      * @param array<string, mixed> $settings Settings array
@@ -74,11 +80,13 @@ class YFGP_Offer_Builder {
      * 
      * @param callable|array $determine_base_service_callback
      * @param callable|array $get_offer_additional_fields_callback
+     * @param callable|array|null $get_manual_base_service_callback v4.19.3: Callback для получения ручных настроек
      * @return void
      */
     public function setCallbacks(
         callable|array $determine_base_service_callback,
-        callable|array $get_offer_additional_fields_callback
+        callable|array $get_offer_additional_fields_callback,
+        callable|array|null $get_manual_base_service_callback = null
     ): void {
         if (!is_callable($determine_base_service_callback)) {
             throw new \InvalidArgumentException('$determine_base_service_callback must be callable');
@@ -86,9 +94,13 @@ class YFGP_Offer_Builder {
         if (!is_callable($get_offer_additional_fields_callback)) {
             throw new \InvalidArgumentException('$get_offer_additional_fields_callback must be callable');
         }
+        if ($get_manual_base_service_callback !== null && !is_callable($get_manual_base_service_callback)) {
+            throw new \InvalidArgumentException('$get_manual_base_service_callback must be callable or null');
+        }
         
         $this->determine_base_service_callback = $determine_base_service_callback;
         $this->get_offer_additional_fields_callback = $get_offer_additional_fields_callback;
+        $this->get_manual_base_service_callback = $get_manual_base_service_callback;
     }
 
     /**
@@ -207,12 +219,35 @@ class YFGP_Offer_Builder {
             // v4.18.1: DEBUG - логируем для отладки
             error_log('YFGP v4.18.1 DEBUG: Doctor ' . $post->ID . ', specialization_slug: ' . $specialization_slug . ', services_for_determination count: ' . count($services_for_determination) . ', services (raw) count: ' . count($services));
 
-            // v4.18.17: Проверка наличия callback перед использованием
-            if ($this->determine_base_service_callback === null) {
-                throw new \RuntimeException('determine_base_service_callback не установлен. Используйте setCallbacks() для установки callbacks.');
+            // v4.19.3: Проверка ручных настроек ПЕРЕД автоматическим определением
+            $specialization_count = count($specialization_slugs);
+            $base_service = null;
+
+            if ($this->get_manual_base_service_callback !== null) {
+                $get_manual = $this->get_manual_base_service_callback;
+                $manual_service = $get_manual($post->ID, $specialization_slug, $mapping, $global_services);
+                if ($manual_service !== null) {
+                    $base_service = $manual_service;
+                    error_log('YFGP v4.19.3 OfferBuilder: Using MANUAL base service for doctor ' . $post->ID . ', specialization: ' . $specialization_slug . ', service: ' . ($base_service['id'] ?? 'unknown') . ', name: ' . ($base_service['name'] ?? 'unknown'));
+                } else {
+                    error_log('YFGP v4.19.3 OfferBuilder: No manual service found for doctor ' . $post->ID . ', specialization: ' . $specialization_slug . ' - will use automatic determination');
+                }
             }
-            $determine_base = $this->determine_base_service_callback;
-            $base_service = $determine_base($services_for_determination, $specialization_slug, $mapping, $data, $global_services);
+
+            // v4.19.3: Автоматическое определение только если ручная настройка НЕ найдена
+            if ($base_service === null) {
+                // v4.18.17: Проверка наличия callback перед использованием
+                if ($this->determine_base_service_callback === null) {
+                    throw new \RuntimeException('determine_base_service_callback не установлен. Используйте setCallbacks() для установки callbacks.');
+                }
+                $determine_base = $this->determine_base_service_callback;
+                $base_service = $determine_base($services_for_determination, $specialization_slug, $mapping, $data, $global_services);
+                
+                // v4.19.3: Log warning if manual settings are missing for doctors with 2+ specializations
+                if ($specialization_count >= 2 && $base_service !== null) {
+                    error_log('YFGP v4.19.3 OfferBuilder WARNING: Doctor ' . $post->ID . ' has ' . $specialization_count . ' specializations but no manual base service configured for: ' . $specialization_slug . ' - using automatic service: ' . ($base_service['id'] ?? 'unknown'));
+                }
+            }
 
             // v3.5.3: Если специализация исключена (УЗИ) и нет услуг - пропускаем создание оффера
             if ($base_service === null) {
@@ -429,4 +464,3 @@ class YFGP_Offer_Builder {
         error_log('YFGP v4.18.1 DEBUG: build_offers_v2 finished for doctor ' . $doctor_id . ', total offers created: ' . count($offers));
     }
 }
-
