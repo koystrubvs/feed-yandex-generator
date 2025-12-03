@@ -26,6 +26,10 @@ class YFGP_Admin_Page {
         add_action('wp_ajax_yfgp_get_cpts_v3', array($this, 'ajax_get_cpts_v3'));
         // v3.2.5: AJAX handler для получения подполей repeater (Task #11)
         add_action('wp_ajax_yfgp_get_repeater_subfields', array($this, 'ajax_get_repeater_subfields'));
+        // v4.20.1: AJAX handlers для ручных настроек услуг по специализациям
+        add_action('wp_ajax_yfgp_load_specialization_services_data', array($this, 'ajax_load_specialization_services_data'));
+        add_action('wp_ajax_yfgp_save_specialization_services', array($this, 'ajax_save_specialization_services'));
+        add_action('wp_ajax_yfgp_check_doctors_multiple_specializations', array($this, 'ajax_check_doctors_multiple_specializations'));
     }
     
     /**
@@ -180,6 +184,15 @@ class YFGP_Admin_Page {
             true
         );
         
+        // v4.20.1: Скрипт для ручных настроек услуг по специализациям
+        wp_enqueue_script(
+            'yfgp-specialization-services-tabs',
+            YFGP_PLUGIN_URL . 'admin/assets/js/specialization-services-tabs.js',
+            array('jquery'),
+            YFGP_VERSION,
+            true
+        );
+        
         // v3.3.5: Передаем available fields для ВСЕХ CPT при загрузке (избегаем 81 AJAX!)
         if (!class_exists('YFGP_Field_Mapper_V3')) {
             require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-v3.php';
@@ -231,6 +244,9 @@ class YFGP_Admin_Page {
             wp_localize_script('yfgp-dynamic-fields', 'yfgpAjax', $ajax_data);
         }
         wp_localize_script('yfgp-dynamic-fields-v3', 'yfgpAjax', $ajax_data);
+        
+        // v4.20.1: Локализация для скрипта ручных настроек услуг
+        wp_localize_script('yfgp-specialization-services-tabs', 'yfgpAjax', $ajax_data);
     }
     
     /**
@@ -1619,6 +1635,188 @@ class YFGP_Admin_Page {
         }
 
         return '';
+    }
+    
+    /**
+     * AJAX: Загрузка данных для ручных настроек услуг по специализациям
+     * 
+     * @since 4.20.1
+     */
+    public function ajax_load_specialization_services_data() {
+        check_ajax_referer('yfgp_ajax_nonce', 'nonce');
+        
+        $post_type = sanitize_text_field($_POST['post_type'] ?? '');
+        if (empty($post_type)) {
+            wp_send_json_error('Post type не указан');
+            return;
+        }
+        
+        $mapping = get_option('yfgp_field_mapping_v3', array());
+        if (empty($mapping['specialities'])) {
+            wp_send_json_success(array('status' => 'no_mapping'));
+            return;
+        }
+        
+        $doctors = $this->get_doctors_with_multiple_specializations($post_type, $mapping);
+        
+        if (empty($doctors)) {
+            wp_send_json_success(array('status' => 'no_doctors'));
+            return;
+        }
+        
+        $saved_settings = get_option('yfgp_doctor_specialization_services_map', array());
+        
+        wp_send_json_success(array(
+            'status' => 'success',
+            'doctors' => $doctors,
+            'saved_settings' => $saved_settings,
+        ));
+    }
+    
+    /**
+     * AJAX: Сохранение ручных настроек услуг по специализациям
+     * 
+     * @since 4.20.1
+     */
+    public function ajax_save_specialization_services() {
+        check_ajax_referer('yfgp_ajax_nonce', 'nonce');
+        
+        $settings_json = $_POST['settings'] ?? '';
+        if (empty($settings_json)) {
+            wp_send_json_error('Настройки не переданы');
+            return;
+        }
+        
+        $settings = json_decode(stripslashes($settings_json), true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            wp_send_json_error('Ошибка декодирования JSON: ' . json_last_error_msg());
+            return;
+        }
+        
+        $normalized_settings = array();
+        foreach ($settings as $doctor_key => $specializations) {
+            if (!is_array($specializations)) {
+                continue;
+            }
+            $normalized_settings[$doctor_key] = array();
+            foreach ($specializations as $specialization_slug => $service_id) {
+                $service_id_clean = str_replace('service_', '', $service_id);
+                $normalized_settings[$doctor_key][$specialization_slug] = $service_id_clean;
+            }
+        }
+        
+        update_option('yfgp_doctor_specialization_services_map', $normalized_settings);
+        
+        wp_send_json_success('Настройки сохранены');
+    }
+    
+    /**
+     * AJAX: Проверка количества врачей с несколькими специализациями
+     * 
+     * @since 4.20.1
+     */
+    public function ajax_check_doctors_multiple_specializations() {
+        check_ajax_referer('yfgp_ajax_nonce', 'nonce');
+        
+        $post_type = sanitize_text_field($_POST['post_type'] ?? '');
+        if (empty($post_type)) {
+            wp_send_json_error('Post type не указан');
+            return;
+        }
+        
+        $mapping = get_option('yfgp_field_mapping_v3', array());
+        $doctors = $this->get_doctors_with_multiple_specializations($post_type, $mapping);
+        
+        wp_send_json_success(array('count' => count($doctors)));
+    }
+    
+    /**
+     * Получить врачей с несколькими специализациями
+     * 
+     * @param string $post_type Post type врачей
+     * @param array $mapping Маппинг полей
+     * @return array Массив врачей с их специализациями
+     */
+    private function get_doctors_with_multiple_specializations($post_type, $mapping) {
+        $doctors = array();
+        
+        if (empty($mapping['specialities'])) {
+            return $doctors;
+        }
+        
+        $specialities_config = $mapping['specialities'];
+        $specialities_source = $specialities_config['source_type'] ?? '';
+        
+        if ($specialities_source !== 'taxonomy') {
+            return $doctors;
+        }
+        
+        $taxonomy_slug = $specialities_config['source_field'] ?? '';
+        if (empty($taxonomy_slug)) {
+            return $doctors;
+        }
+        
+        // v4.20.1: Получить список всех услуг для выбора
+        $settings = get_option('yfgp_settings', array());
+        $services_cpt = $settings['cpt_services'] ?? 'services';
+        $services_list = $this->get_all_services($services_cpt);
+        
+        $posts = get_posts(array(
+            'post_type' => $post_type,
+            'posts_per_page' => -1,
+            'post_status' => 'publish',
+        ));
+        
+        foreach ($posts as $post) {
+            $terms = wp_get_post_terms($post->ID, $taxonomy_slug, array('fields' => 'all'));
+            
+            if (count($terms) >= 2) {
+                // v4.20.1: Используем массив для специализаций (JS ожидает forEach)
+                $specializations = array();
+                foreach ($terms as $term) {
+                    $specializations[] = array(
+                        'slug' => $term->slug,
+                        'text' => $term->name,
+                        'services' => $services_list, // v4.20.1: Добавить список услуг
+                    );
+                }
+                
+                $doctors['doctor_' . $post->ID] = array(
+                    'id' => $post->ID,
+                    'name' => $post->post_title,
+                    'specializations' => $specializations,
+                );
+            }
+        }
+        
+        return $doctors;
+    }
+    
+    /**
+     * Получить список всех услуг
+     * 
+     * @param string $cpt Post type услуг
+     * @return array Массив услуг с id и name
+     */
+    private function get_all_services($cpt) {
+        $services = array();
+        
+        $posts = get_posts(array(
+            'post_type' => $cpt,
+            'posts_per_page' => -1,
+            'post_status' => 'publish',
+            'orderby' => 'title',
+            'order' => 'ASC',
+        ));
+        
+        foreach ($posts as $post) {
+            $services[] = array(
+                'id' => 'service_' . $post->ID,
+                'name' => $post->post_title,
+            );
+        }
+        
+        return $services;
     }
 }
 
