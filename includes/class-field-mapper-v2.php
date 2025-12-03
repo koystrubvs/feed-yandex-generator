@@ -811,19 +811,38 @@ class YFGP_Field_Mapper_V2 extends YFGP_Field_Mapper {
             $entries[$slug] = $label;
         };
 
+        // v4.20.2: Проверка сериализованных строк ПЕРЕД обработкой как обычной строки
+        // Unified Field Mapper обычно распарсивает сериализованные строки, но на всякий случай проверяем
+        if (is_string($raw_value) && $raw_value !== '') {
+            $unserialized = maybe_unserialize($raw_value);
+            // Если распарсилось и это массив - обрабатываем как массив
+            if ($unserialized !== false && is_array($unserialized)) {
+                $raw_value = $unserialized;
+            }
+        }
+        
         if (is_array($raw_value)) {
+            // v4.20.2: Проверка ассоциативных массивов checkbox (ключи = специализации, значения = true/false)
+            // Это работает для JetEngine и ACF checkbox полей
             if ($this->is_jetengine_checkbox_map($raw_value)) {
                 foreach ($raw_value as $candidate_slug => $flag) {
+                    // Фильтруем только true значения (выбранные checkbox)
                     if ($this->is_truthy_flag($flag)) {
                         $store_entry($this->build_speciality_entry(array('slug' => $candidate_slug), $field_options, $acf_definition, $fallback));
                     }
                 }
             } else {
+                // Обычные массивы (select multiple, polyselect, обычные checkbox)
                 foreach ($raw_value as $item) {
+                    // v4.20.2: Фильтруем false/null/empty значения
+                    if ($item === false || $item === null || $item === '' || $item === 'false' || $item === '0') {
+                        continue;
+                    }
                     $store_entry($this->build_speciality_entry($item, $field_options, $acf_definition, $fallback));
                 }
             }
         } elseif (is_string($raw_value) && $raw_value !== '') {
+            // Обычная строка с разделителями (fallback для старых данных)
             $parts = preg_split('/<br\s*\/?>|\r\n|\n|,/', $raw_value);
             foreach ($parts as $part) {
                 $part = trim(wp_strip_all_tags($part));
