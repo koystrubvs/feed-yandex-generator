@@ -1,5 +1,3 @@
-.DS_Store
-Thumbs.db
 *.log
 node_modules/
 .idea/
@@ -67,9 +65,3 @@ desktop.ini
 
 # Composer phar (not needed in Git)
 composer.phar
-
-# PowerShell command artifacts (accidental file creation from command errors)
-e --abbrev-ref HEAD
-s -File *.ps1
-tatus --short
-yandex-feed-generator-pro-v2*
