@@ -241,20 +241,58 @@
         );
         select.append(emptyOption);
 
-        // Add services
+        // v4.20.3: Add services with optgroup support (grouped by "Связанные услуги" / "Все услуги")
         if (spec.services && spec.services.length > 0) {
+          // Group services by group field
+          const groupedServices = {};
           spec.services.forEach((service) => {
-            const option = $("<option></option>");
-            // v4.19.0 FIX: Normalize service ID format - ensure 'service_' prefix for consistency
-            let serviceId = service.id || "";
-            if (serviceId && !serviceId.toString().startsWith("service_")) {
-              // Extract numeric part if it's in format 'service_123' or just '123'
-              const numericId = serviceId.toString().replace(/^service_/, "");
-              serviceId = "service_" + numericId;
+            const group = service.group || "";
+            if (!groupedServices[group]) {
+              groupedServices[group] = [];
             }
-            option.val(serviceId);
-            option.text(escapeHtml(service.name));
-            select.append(option);
+            groupedServices[group].push(service);
+          });
+
+          // Add services grouped by optgroup
+          Object.keys(groupedServices).forEach((groupName) => {
+            const servicesInGroup = groupedServices[groupName];
+            
+            // If group is empty (no grouping) - add options directly
+            if (!groupName) {
+              servicesInGroup.forEach((service) => {
+                const option = $("<option></option>");
+                // v4.19.0 FIX: Normalize service ID format - ensure 'service_' prefix for consistency
+                let serviceId = service.id || "";
+                if (serviceId && !serviceId.toString().startsWith("service_")) {
+                  // Extract numeric part if it's in format 'service_123' or just '123'
+                  const numericId = serviceId.toString().replace(/^service_/, "");
+                  serviceId = "service_" + numericId;
+                }
+                option.val(serviceId);
+                option.text(escapeHtml(service.name));
+                select.append(option);
+              });
+            } else {
+              // Create optgroup for grouped services
+              const optgroup = $("<optgroup></optgroup>");
+              optgroup.attr("label", escapeHtml(groupName));
+              
+              servicesInGroup.forEach((service) => {
+                const option = $("<option></option>");
+                // v4.19.0 FIX: Normalize service ID format - ensure 'service_' prefix for consistency
+                let serviceId = service.id || "";
+                if (serviceId && !serviceId.toString().startsWith("service_")) {
+                  // Extract numeric part if it's in format 'service_123' or just '123'
+                  const numericId = serviceId.toString().replace(/^service_/, "");
+                  serviceId = "service_" + numericId;
+                }
+                option.val(serviceId);
+                option.text(escapeHtml(service.name));
+                optgroup.append(option);
+              });
+              
+              select.append(optgroup);
+            }
           });
         }
 

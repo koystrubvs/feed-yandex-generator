@@ -1700,8 +1700,14 @@ class YFGP_Admin_Page {
             }
             $normalized_settings[$doctor_key] = array();
             foreach ($specializations as $specialization_slug => $service_id) {
-                $service_id_clean = str_replace('service_', '', $service_id);
-                $normalized_settings[$doctor_key][$specialization_slug] = $service_id_clean;
+                // v4.20.3: Сохранить 'base_service' как есть (для использования базовой услуги из настроек)
+                if ($service_id === 'base_service') {
+                    $normalized_settings[$doctor_key][$specialization_slug] = 'base_service';
+                } else {
+                    // Убрать префикс 'service_' для обычных услуг
+                    $service_id_clean = str_replace('service_', '', $service_id);
+                    $normalized_settings[$doctor_key][$specialization_slug] = $service_id_clean;
+                }
             }
         }
         
@@ -1752,12 +1758,12 @@ class YFGP_Admin_Page {
             return $doctors;
         }
         
-        // v4.20.1: Получить список всех услуг для выбора
+        // v4.20.3: Получить настройки для базовой услуги
         $settings = get_option('yfgp_settings', array());
         $services_cpt = $settings['cpt_services'] ?? 'services';
-        $services_list = $this->get_all_services($services_cpt);
+        $default_service_name = $settings['default_service_name'] ?? 'Первичный прием';
         
-        // Загрузить Unified Field Mapper для универсального извлечения специализаций
+        // Загрузить Unified Field Mapper для универсального извлечения специализаций и услуг
         if (!class_exists('YFGP_Field_Mapper_Unified')) {
             require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
         }
@@ -1779,9 +1785,12 @@ class YFGP_Admin_Page {
             
             // Проверить что есть 2+ специализации
             if (count($specializations) >= 2) {
+                // v4.20.3: Получить список услуг для этого врача (только связанные, если есть)
+                $doctor_services = $this->get_doctor_services($post->ID, $mapping, $services_cpt, $default_service_name);
+                
                 // Добавить список услуг к каждой специализации
                 foreach ($specializations as &$spec) {
-                    $spec['services'] = $services_list;
+                    $spec['services'] = $doctor_services;
                 }
                 unset($spec); // Убрать ссылку
                 
@@ -2049,7 +2058,108 @@ class YFGP_Admin_Page {
     }
     
     /**
-     * Получить список всех услуг
+     * Получить список услуг для врача (с группами если есть связанные услуги)
+     * 
+     * @param int $doctor_id ID врача
+     * @param array $mapping Маппинг полей
+     * @param string $services_cpt Post type услуг
+     * @param string $default_service_name Название базовой услуги из настроек
+     * @return array Массив услуг с id, name и group (включая опцию базовой услуги)
+     * @since 4.20.3
+     */
+    private function get_doctor_services($doctor_id, $mapping, $services_cpt, $default_service_name) {
+        $services = array();
+        
+        // v4.20.3: Добавить опцию "Использовать базовую услугу из настроек" в начало списка
+        $services[] = array(
+            'id' => 'base_service',
+            'name' => '— Использовать базовую услугу (' . esc_html($default_service_name) . ') —',
+            'group' => '',
+        );
+        
+        // Загрузить Unified Field Mapper для получения связанных услуг
+        if (!class_exists('YFGP_Field_Mapper_Unified')) {
+            require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
+        }
+        $mapper = YFGP_Field_Mapper_Unified::get_instance();
+        
+        // v4.20.3: Получить связанные услуги через маппинг поля services
+        $related_services = array();
+        if (!empty($mapping['services'])) {
+            $services_config = $mapping['services'];
+            $related_services_raw = $mapper->getFieldValue($doctor_id, $services_config);
+            
+            // Преобразовать в массив ID услуг
+            if (!empty($related_services_raw)) {
+                if (!is_array($related_services_raw)) {
+                    $related_services_raw = array($related_services_raw);
+                }
+                
+                foreach ($related_services_raw as $service_item) {
+                    $service_id = is_object($service_item) ? $service_item->ID : $service_item;
+                    if (is_numeric($service_id)) {
+                        $related_services[] = intval($service_id);
+                    }
+                }
+            }
+        }
+        
+        // v4.20.3: Получить все услуги
+        $all_posts = get_posts(array(
+            'post_type' => $services_cpt,
+            'posts_per_page' => -1,
+            'post_status' => 'publish',
+            'orderby' => 'title',
+            'order' => 'ASC',
+        ));
+        
+        // v4.20.3: Если есть связанные услуги - разделить на группы
+        if (!empty($related_services)) {
+            // Группа "Связанные услуги"
+            $related_posts = array();
+            $all_posts_filtered = array();
+            
+            foreach ($all_posts as $post) {
+                if (in_array($post->ID, $related_services)) {
+                    $related_posts[] = $post;
+                } else {
+                    $all_posts_filtered[] = $post;
+                }
+            }
+            
+            // Добавить связанные услуги
+            foreach ($related_posts as $post) {
+                $services[] = array(
+                    'id' => 'service_' . $post->ID,
+                    'name' => $post->post_title,
+                    'group' => 'Связанные услуги',
+                );
+            }
+            
+            // Добавить все остальные услуги
+            foreach ($all_posts_filtered as $post) {
+                $services[] = array(
+                    'id' => 'service_' . $post->ID,
+                    'name' => $post->post_title,
+                    'group' => 'Все услуги',
+                );
+            }
+        } else {
+            // Если нет связанных услуг - показать все услуги без групп
+            foreach ($all_posts as $post) {
+                $services[] = array(
+                    'id' => 'service_' . $post->ID,
+                    'name' => $post->post_title,
+                    'group' => '',
+                );
+            }
+        }
+        
+        return $services;
+    }
+    
+    /**
+     * Получить список всех услуг (legacy метод, используется в других местах)
      * 
      * @param string $cpt Post type услуг
      * @return array Массив услуг с id и name
