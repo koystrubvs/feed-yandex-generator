@@ -1891,47 +1891,47 @@ class YFGP_Admin_Page {
             
             // Если это массив значений
             if (is_array($raw_value)) {
-                foreach ($raw_value as $value) {
-                    // v4.20.2: Фильтровать false значения - они не должны быть в списке
-                    if ($value === false || $value === null || $value === '' || $value === 'false' || $value === '0') {
-                        continue;
-                    }
-                    
-                    if (is_string($value) || is_numeric($value)) {
-                        // Получить метку из choices, если доступна
-                        $label = $field_options[$value] ?? $value;
-                        
-                        // Использовать значение как slug и метку как text
-                        $slug = is_string($value) ? sanitize_title($value) : (string)$value;
-                        $specializations[] = array(
-                            'slug' => $slug,
-                            'text' => is_string($label) ? $label : (string)$value,
-                        );
-                    } elseif (is_array($value) && isset($value['value'])) {
-                        // Если это структурированный массив с ключом 'value'
-                        $value_key = $value['value'];
-                        
-                        // Фильтровать false значения
-                        if ($value_key === false || $value_key === null || $value_key === '' || $value_key === 'false') {
+                // v4.20.2: Проверить является ли это ассоциативным массивом checkbox (ключи = специализации, значения = true/false)
+                $is_associative = false;
+                $has_boolean_values = false;
+                
+                if (!empty($raw_value)) {
+                    $first_key = array_key_first($raw_value);
+                    $first_value = $raw_value[$first_key];
+                    // Проверяем что ключи не числовые и значения это true/false
+                    $is_associative = !is_numeric($first_key) && (
+                        $first_value === true || $first_value === false || 
+                        $first_value === 'true' || $first_value === 'false' ||
+                        $first_value === '1' || $first_value === '0'
+                    );
+                    $has_boolean_values = $is_associative;
+                }
+                
+                // Если это ассоциативный массив checkbox (ключи = специализации, значения = true/false)
+                if ($is_associative && $has_boolean_values) {
+                    foreach ($raw_value as $spec_key => $spec_value) {
+                        // Фильтровать только true значения (выбранные checkbox)
+                        if ($spec_value === false || $spec_value === null || $spec_value === '' || 
+                            $spec_value === 'false' || $spec_value === '0' || $spec_value === 0) {
                             continue;
                         }
                         
-                        $slug = is_string($value_key) ? sanitize_title($value_key) : (string)$value_key;
-                        $text = $value['label'] ?? $field_options[$value_key] ?? $value_key ?? $slug;
-                        $specializations[] = array(
-                            'slug' => $slug,
-                            'text' => is_string($text) ? $text : (string)$slug,
-                        );
+                        // Использовать ключ как значение специализации
+                        if (is_string($spec_key) || is_numeric($spec_key)) {
+                            // Получить метку из choices, если доступна
+                            $label = $field_options[$spec_key] ?? $spec_key;
+                            
+                            $slug = is_string($spec_key) ? sanitize_title($spec_key) : (string)$spec_key;
+                            $specializations[] = array(
+                                'slug' => $slug,
+                                'text' => is_string($label) ? $label : (string)$spec_key,
+                            );
+                        }
                     }
-                }
-            }
-            // Если это строка (одно значение) - не добавляем (нужно 2+)
-            elseif (is_string($raw_value) && !empty($raw_value)) {
-                // Для checkbox может быть сериализованная строка
-                $parsed = maybe_unserialize($raw_value);
-                if (is_array($parsed)) {
-                    foreach ($parsed as $value) {
-                        // v4.20.2: Фильтровать false значения
+                } else {
+                    // Обычный массив значений (не ассоциативный)
+                    foreach ($raw_value as $value) {
+                        // v4.20.2: Фильтровать false значения - они не должны быть в списке
                         if ($value === false || $value === null || $value === '' || $value === 'false' || $value === '0') {
                             continue;
                         }
@@ -1940,11 +1940,91 @@ class YFGP_Admin_Page {
                             // Получить метку из choices, если доступна
                             $label = $field_options[$value] ?? $value;
                             
+                            // Использовать значение как slug и метку как text
                             $slug = is_string($value) ? sanitize_title($value) : (string)$value;
                             $specializations[] = array(
                                 'slug' => $slug,
                                 'text' => is_string($label) ? $label : (string)$value,
                             );
+                        } elseif (is_array($value) && isset($value['value'])) {
+                            // Если это структурированный массив с ключом 'value'
+                            $value_key = $value['value'];
+                            
+                            // Фильтровать false значения
+                            if ($value_key === false || $value_key === null || $value_key === '' || $value_key === 'false') {
+                                continue;
+                            }
+                            
+                            $slug = is_string($value_key) ? sanitize_title($value_key) : (string)$value_key;
+                            $text = $value['label'] ?? $field_options[$value_key] ?? $value_key ?? $slug;
+                            $specializations[] = array(
+                                'slug' => $slug,
+                                'text' => is_string($text) ? $text : (string)$slug,
+                            );
+                        }
+                    }
+                }
+            }
+            // Если это строка (одно значение) - не добавляем (нужно 2+)
+            elseif (is_string($raw_value) && !empty($raw_value)) {
+                // Для checkbox может быть сериализованная строка
+                $parsed = maybe_unserialize($raw_value);
+                if (is_array($parsed)) {
+                    // v4.20.2: Проверить является ли это ассоциативным массивом checkbox
+                    $is_associative = false;
+                    $has_boolean_values = false;
+                    
+                    if (!empty($parsed)) {
+                        $first_key = array_key_first($parsed);
+                        $first_value = $parsed[$first_key];
+                        // Проверяем что ключи не числовые и значения это true/false
+                        $is_associative = !is_numeric($first_key) && (
+                            $first_value === true || $first_value === false || 
+                            $first_value === 'true' || $first_value === 'false' ||
+                            $first_value === '1' || $first_value === '0'
+                        );
+                        $has_boolean_values = $is_associative;
+                    }
+                    
+                    // Если это ассоциативный массив checkbox (ключи = специализации, значения = true/false)
+                    if ($is_associative && $has_boolean_values) {
+                        foreach ($parsed as $spec_key => $spec_value) {
+                            // Фильтровать только true значения (выбранные checkbox)
+                            if ($spec_value === false || $spec_value === null || $spec_value === '' || 
+                                $spec_value === 'false' || $spec_value === '0' || $spec_value === 0) {
+                                continue;
+                            }
+                            
+                            // Использовать ключ как значение специализации
+                            if (is_string($spec_key) || is_numeric($spec_key)) {
+                                // Получить метку из choices, если доступна
+                                $label = $field_options[$spec_key] ?? $spec_key;
+                                
+                                $slug = is_string($spec_key) ? sanitize_title($spec_key) : (string)$spec_key;
+                                $specializations[] = array(
+                                    'slug' => $slug,
+                                    'text' => is_string($label) ? $label : (string)$spec_key,
+                                );
+                            }
+                        }
+                    } else {
+                        // Обычный массив значений
+                        foreach ($parsed as $value) {
+                            // v4.20.2: Фильтровать false значения
+                            if ($value === false || $value === null || $value === '' || $value === 'false' || $value === '0') {
+                                continue;
+                            }
+                            
+                            if (is_string($value) || is_numeric($value)) {
+                                // Получить метку из choices, если доступна
+                                $label = $field_options[$value] ?? $value;
+                                
+                                $slug = is_string($value) ? sanitize_title($value) : (string)$value;
+                                $specializations[] = array(
+                                    'slug' => $slug,
+                                    'text' => is_string($label) ? $label : (string)$value,
+                                );
+                            }
                         }
                     }
                 }
