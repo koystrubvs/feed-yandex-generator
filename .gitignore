@@ -19,6 +19,19 @@ tools/
 # Test files
 test-*.php
 
+# Validation temporary scripts
+temp-*.php
+temp-export-*.php
+temp-parse-*.php
+temp-validate-*.php
+
+# Validation temporary JSON exports
+*-validation-results-*.json
+*-structure-analysis-*.json
+export-summary.json
+validation_results.json
+parsed_feed.json
+
 # Development configs
 phpstan.neon
 phpunit.xml
