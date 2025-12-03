@@ -219,6 +219,24 @@ class YFGP_Offer_Builder {
             // v4.18.1: DEBUG - логируем для отладки
             error_log('YFGP v4.18.1 DEBUG: Doctor ' . $post->ID . ', specialization_slug: ' . $specialization_slug . ', services_for_determination count: ' . count($services_for_determination) . ', services (raw) count: ' . count($services));
 
+            // v4.20.1: Проверка исключений ПЕРЕД проверкой ручных настроек
+            // Если специализация исключена, не используем ручные настройки и не создаём оффер
+            // Проверка через settings напрямую (метод is_specialty_excluded находится в Feed_Generator_V2, не в field_mapper)
+            $excluded_terms = $this->settings['exclusions_terms'] ?? array();
+            $specialization_slug_normalized = urldecode($specialization_slug);
+            $is_excluded = false;
+            if (!empty($excluded_terms)) {
+                // Проверяем оба варианта (оригинальный и декодированный)
+                if (in_array($specialization_slug, $excluded_terms, true) || in_array($specialization_slug_normalized, $excluded_terms, true)) {
+                    $is_excluded = true;
+                }
+            }
+            
+            if ($is_excluded) {
+                error_log('YFGP v4.20.1: Specialty ' . $specialization_slug . ' excluded, skipping offer creation for doctor ' . $post->ID);
+                continue;
+            }
+            
             // v4.19.3: Проверка ручных настроек ПЕРЕД автоматическим определением
             $specialization_count = count($specialization_slugs);
             $base_service = null;

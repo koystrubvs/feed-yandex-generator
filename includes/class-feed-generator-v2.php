@@ -155,7 +155,8 @@ class YFGP_Feed_Generator_V2 {
                                 if ($offer_builder !== null && method_exists($offer_builder, 'setCallbacks')) {
                                     $offer_builder->setCallbacks(
                                         array($this, 'determine_base_service'),
-                                        array($this, 'get_offer_additional_fields')
+                                        array($this, 'get_offer_additional_fields'),
+                                        array($this, 'get_manual_base_service_for_specialization') // v4.20.1: Ручные настройки
                                     );
                                 }
                             }
@@ -301,7 +302,8 @@ class YFGP_Feed_Generator_V2 {
                                 if ($offer_builder !== null && method_exists($offer_builder, 'setCallbacks')) {
                                     $offer_builder->setCallbacks(
                                         array($this, 'determine_base_service'),
-                                        array($this, 'get_offer_additional_fields')
+                                        array($this, 'get_offer_additional_fields'),
+                                        array($this, 'get_manual_base_service_for_specialization') // v4.20.1: Ручные настройки
                                     );
                                 }
                             }
@@ -4062,6 +4064,90 @@ class YFGP_Feed_Generator_V2 {
         }
 
         return !empty($value);
+    }
+
+    /**
+     * Получает ручную настройку базовой услуги для специализации врача
+     * 
+     * @param int $doctor_id ID врача
+     * @param string $specialization_slug Слаг специализации
+     * @param array $mapping Настройки маппинга
+     * @param array $global_services Глобальный список услуг
+     * @return array|null Данные услуги или null
+     * @since 4.20.1
+     */
+    public function get_manual_base_service_for_specialization($doctor_id, $specialization_slug, $mapping, $global_services) {
+        // Получаем ручные настройки
+        $manual_settings = get_option('yfgp_doctor_specialization_services_map', array());
+        
+        if (empty($manual_settings)) {
+            return null;
+        }
+        
+        // Ключ врача в формате "doctor_{id}" или просто "{id}"
+        $doctor_key = 'doctor_' . $doctor_id;
+        $doctor_key_simple = (string) $doctor_id;
+        
+        $doctor_settings = $manual_settings[$doctor_key] ?? $manual_settings[$doctor_key_simple] ?? null;
+        
+        if (empty($doctor_settings)) {
+            return null;
+        }
+        
+        // Нормализуем слаг специализации (URL-decode если нужно)
+        $normalized_slug = urldecode($specialization_slug);
+        $normalized_slug_lower = mb_strtolower($normalized_slug, 'UTF-8');
+        
+        // Ищем настройку для специализации
+        $service_value = null;
+        foreach ($doctor_settings as $spec_slug => $service_id) {
+            $spec_decoded = urldecode($spec_slug);
+            $spec_lower = mb_strtolower($spec_decoded, 'UTF-8');
+            
+            if ($spec_lower === $normalized_slug_lower || $spec_decoded === $normalized_slug || $spec_slug === $specialization_slug) {
+                $service_value = $service_id;
+                break;
+            }
+        }
+        
+        if (empty($service_value)) {
+            return null;
+        }
+        
+        // Нормализуем ID услуги (убираем префикс service_ если есть)
+        $service_id = $service_value;
+        if (strpos($service_id, 'service_') === 0) {
+            $service_id = substr($service_id, 8); // Убираем "service_"
+        }
+        
+        // Ищем услугу в глобальном списке
+        foreach ($global_services as $service) {
+            $global_id = $service['id'] ?? '';
+            // Нормализуем глобальный ID
+            if (strpos($global_id, 'service_') === 0) {
+                $global_id_normalized = substr($global_id, 8);
+            } else {
+                $global_id_normalized = $global_id;
+            }
+            
+            if ($global_id_normalized === $service_id || $global_id === $service_id || $global_id === $service_value) {
+                return $service;
+            }
+        }
+        
+        // Если услуга не найдена в глобальном списке, пробуем получить из БД
+        $service_post = get_post((int) $service_id);
+        if ($service_post && $service_post->post_status === 'publish') {
+            return array(
+                'id' => $service_id,
+                'name' => $service_post->post_title,
+                'internal_id' => $service_id,
+                'description' => $service_post->post_title,
+                'gov_id' => $service_id,
+            );
+        }
+        
+        return null;
     }
 }
 

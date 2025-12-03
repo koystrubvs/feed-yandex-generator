@@ -643,6 +643,14 @@ $offer_config = get_option('yfgp_offer_config', array());
                 ?>
                 <span class="yfgp-tab-badge" data-tab-id="offers">0/14</span>
             </a>
+            <a href="#tab-specialization-services" class="nav-tab" data-tab="specialization-services">
+                ⚙️ Услуги по специализациям<?php
+                    $label = $tab_context['doctors']['label'] ?? '';
+                    $display = $label !== '' ? $label : '—';
+                    echo ' • ' . esc_html($display);
+                ?>
+                <span class="yfgp-tab-badge" data-tab-id="specialization-services" style="display: none;">0</span>
+            </a>
         </h2>
         
         <!-- ====================== TAB 1: ВРАЧИ ====================== -->
@@ -1367,6 +1375,53 @@ $offer_config = get_option('yfgp_offer_config', array());
             </button>
             <span class="save-status" style="margin-left: 20px; display: none;"></span>
             <span id="yfgp-test-result" style="margin-left: 10px; display: none;"></span>
+        </div>
+        
+        <!-- ====================== TAB 5: УСЛУГИ ПО СПЕЦИАЛИЗАЦИЯМ ====================== -->
+        <div id="tab-specialization-services" class="yfgp-tab-content">
+            <div class="yfgp-mapping-section">
+                <h2>⚙️ Ручные настройки базовых услуг для специализаций</h2>
+                <p class="description">
+                    Для врачей с 2+ специализациями необходимо указать базовую услугу для каждой специализации.
+                    Это гарантирует корректное создание офферов в фиде.
+                </p>
+                
+                <div id="yfgp-specialization-services-container">
+                    <div id="yfgp-specialization-services-loading" style="text-align: center; padding: 40px;">
+                        <p>⏳ Загрузка данных...</p>
+                    </div>
+                    
+                    <div id="yfgp-specialization-services-empty" style="display: none; padding: 40px; text-align: center; background: #f0f0f1; border-radius: 4px;">
+                        <p class="description">Нет данных для отображения. Проверьте настройки маппинга полей.</p>
+                    </div>
+                    
+                    <div id="yfgp-specialization-services-no-doctors" style="display: none; padding: 40px; text-align: center; background: #fff3cd; border-radius: 4px; border-left: 4px solid #ffc107;">
+                        <p class="description">Не найдено врачей с несколькими специализациями. Настройка не требуется.</p>
+                    </div>
+                    
+                    <div id="yfgp-specialization-services-table-container" style="display: none;">
+                        <table class="wp-list-table widefat fixed striped" style="margin-top: 20px;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 200px;">Врач</th>
+                                    <th style="width: 200px;">Специализация</th>
+                                    <th>Базовая услуга</th>
+                                </tr>
+                            </thead>
+                            <tbody id="yfgp-specialization-services-tbody">
+                                <!-- Заполняется через JavaScript -->
+                            </tbody>
+                        </table>
+                        
+                        <div style="margin-top: 20px;">
+                            <button type="button" id="yfgp-save-specialization-services" class="button button-primary button-large">
+                                💾 Сохранить настройки
+                            </button>
+                            <span id="yfgp-save-specialization-services-message" style="margin-left: 15px;"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </form>
 </div>
