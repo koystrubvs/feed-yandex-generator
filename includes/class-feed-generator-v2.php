@@ -4114,6 +4114,11 @@ class YFGP_Feed_Generator_V2 {
             return null;
         }
         
+        // v4.20.3: Если выбрана опция "Использовать базовую услугу" - вернуть null для автоматического определения
+        if ($service_value === 'base_service') {
+            return null; // Использовать автоматическую логику определения базовой услуги
+        }
+        
         // Нормализуем ID услуги (убираем префикс service_ если есть)
         $service_id = $service_value;
         if (strpos($service_id, 'service_') === 0) {
