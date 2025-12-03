@@ -1747,12 +1747,8 @@ class YFGP_Admin_Page {
         $specialities_config = $mapping['specialities'];
         $specialities_source = $specialities_config['source_type'] ?? '';
         
-        if ($specialities_source !== 'taxonomy') {
-            return $doctors;
-        }
-        
-        $taxonomy_slug = $specialities_config['source_field'] ?? '';
-        if (empty($taxonomy_slug)) {
+        // v4.20.2: Поддержка всех типов полей (taxonomy, meta_field, checkbox и т.д.)
+        if (empty($specialities_source)) {
             return $doctors;
         }
         
@@ -1761,6 +1757,12 @@ class YFGP_Admin_Page {
         $services_cpt = $settings['cpt_services'] ?? 'services';
         $services_list = $this->get_all_services($services_cpt);
         
+        // Загрузить Unified Field Mapper для универсального извлечения специализаций
+        if (!class_exists('YFGP_Field_Mapper_Unified')) {
+            require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
+        }
+        $mapper = YFGP_Field_Mapper_Unified::get_instance();
+        
         $posts = get_posts(array(
             'post_type' => $post_type,
             'posts_per_page' => -1,
@@ -1768,18 +1770,20 @@ class YFGP_Admin_Page {
         ));
         
         foreach ($posts as $post) {
-            $terms = wp_get_post_terms($post->ID, $taxonomy_slug, array('fields' => 'all'));
+            // v4.20.2: Использовать Unified Field Mapper для извлечения специализаций из любого типа поля
+            // Используем публичный метод getFieldValue() вместо приватного extractField()
+            $specializations_raw = $mapper->getFieldValue($post->ID, $specialities_config);
             
-            if (count($terms) >= 2) {
-                // v4.20.1: Используем массив для специализаций (JS ожидает forEach)
-                $specializations = array();
-                foreach ($terms as $term) {
-                    $specializations[] = array(
-                        'slug' => $term->slug,
-                        'text' => $term->name,
-                        'services' => $services_list, // v4.20.1: Добавить список услуг
-                    );
+            // Преобразовать результат в массив специализаций
+            $specializations = $this->normalize_specializations($specializations_raw, $specialities_source, $specialities_config);
+            
+            // Проверить что есть 2+ специализации
+            if (count($specializations) >= 2) {
+                // Добавить список услуг к каждой специализации
+                foreach ($specializations as &$spec) {
+                    $spec['services'] = $services_list;
                 }
+                unset($spec); // Убрать ссылку
                 
                 $doctors['doctor_' . $post->ID] = array(
                     'id' => $post->ID,
@@ -1790,6 +1794,130 @@ class YFGP_Admin_Page {
         }
         
         return $doctors;
+    }
+    
+    /**
+     * Нормализовать специализации в единый формат для JavaScript
+     * 
+     * @param mixed $raw_value Сырое значение из Unified Field Mapper
+     * @param string $source_type Тип источника (taxonomy, meta_field и т.д.)
+     * @param array $config Конфигурация поля
+     * @return array Массив специализаций в формате [['slug' => ..., 'text' => ...], ...]
+     * @since 4.20.2
+     */
+    private function normalize_specializations($raw_value, $source_type, $config) {
+        $specializations = array();
+        
+        // Если значение пустое или не массив
+        if (empty($raw_value)) {
+            return $specializations;
+        }
+        
+        // Для таксономий - Unified Field Mapper возвращает массив объектов WP_Term или массив slug'ов
+        if ($source_type === 'taxonomy') {
+            $taxonomy_slug = $config['source_field'] ?? '';
+            if (empty($taxonomy_slug)) {
+                return $specializations;
+            }
+            
+            // Если это массив объектов WP_Term
+            if (is_array($raw_value) && !empty($raw_value)) {
+                $first_item = reset($raw_value);
+                if (is_object($first_item) && isset($first_item->slug)) {
+                    // Массив объектов WP_Term
+                    foreach ($raw_value as $term) {
+                        if (is_object($term) && isset($term->slug)) {
+                            $specializations[] = array(
+                                'slug' => $term->slug,
+                                'text' => $term->name ?? $term->slug,
+                            );
+                        }
+                    }
+                } elseif (is_string($first_item)) {
+                    // Массив slug'ов - получить термины
+                    $terms = get_terms(array(
+                        'taxonomy' => $taxonomy_slug,
+                        'slug' => $raw_value,
+                        'hide_empty' => false,
+                    ));
+                    
+                    if (!is_wp_error($terms) && !empty($terms)) {
+                        foreach ($terms as $term) {
+                            $specializations[] = array(
+                                'slug' => $term->slug,
+                                'text' => $term->name,
+                            );
+                        }
+                    } else {
+                        // Если не удалось получить термины - использовать slug'и как текст
+                        foreach ($raw_value as $slug) {
+                            if (is_string($slug)) {
+                                $specializations[] = array(
+                                    'slug' => $slug,
+                                    'text' => $slug,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Для meta_field (checkbox, select multiple и т.д.) - Unified Field Mapper возвращает массив значений
+        elseif ($source_type === 'meta_field') {
+            // Если это массив значений
+            if (is_array($raw_value)) {
+                foreach ($raw_value as $value) {
+                    if (is_string($value) || is_numeric($value)) {
+                        // Использовать значение как slug и text
+                        $slug = is_string($value) ? sanitize_title($value) : (string)$value;
+                        $specializations[] = array(
+                            'slug' => $slug,
+                            'text' => is_string($value) ? $value : (string)$value,
+                        );
+                    } elseif (is_array($value) && isset($value['value'])) {
+                        // Если это структурированный массив с ключом 'value'
+                        $slug = is_string($value['value']) ? sanitize_title($value['value']) : (string)$value['value'];
+                        $text = $value['label'] ?? $value['value'] ?? $slug;
+                        $specializations[] = array(
+                            'slug' => $slug,
+                            'text' => $text,
+                        );
+                    }
+                }
+            }
+            // Если это строка (одно значение) - не добавляем (нужно 2+)
+            elseif (is_string($raw_value) && !empty($raw_value)) {
+                // Для checkbox может быть сериализованная строка
+                $parsed = maybe_unserialize($raw_value);
+                if (is_array($parsed)) {
+                    foreach ($parsed as $value) {
+                        if (is_string($value) || is_numeric($value)) {
+                            $slug = is_string($value) ? sanitize_title($value) : (string)$value;
+                            $specializations[] = array(
+                                'slug' => $slug,
+                                'text' => is_string($value) ? $value : (string)$value,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        // Для других типов полей - попробовать обработать как массив
+        else {
+            if (is_array($raw_value)) {
+                foreach ($raw_value as $value) {
+                    if (is_string($value) || is_numeric($value)) {
+                        $slug = is_string($value) ? sanitize_title($value) : (string)$value;
+                        $specializations[] = array(
+                            'slug' => $slug,
+                            'text' => is_string($value) ? $value : (string)$value,
+                        );
+                    }
+                }
+            }
+        }
+        
+        return $specializations;
     }
     
     /**
