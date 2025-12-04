@@ -607,8 +607,11 @@ class YFGP_Field_Mapper_V2 {
                                 }
                                 
                                 // v4.18.1: Fallback для валюты, если не извлечена
-                                if (empty($service_data['currency']) && !empty($this->settings['default_currency'])) {
-                                    $service_data['currency'] = $this->settings['default_currency'];
+                                if (empty($service_data['currency'])) {
+                                    $settings = get_option('yfgp_settings', array());
+                                    if (!empty($settings['default_currency'])) {
+                                        $service_data['currency'] = $settings['default_currency'];
+                                    }
                                 }
                             }
                         }
