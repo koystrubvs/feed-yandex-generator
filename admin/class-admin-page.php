@@ -847,12 +847,12 @@ class YFGP_Admin_Page {
         
         $post_type = sanitize_text_field($_POST['post_type'] ?? 'doctors');
         
-        // Использовать Field Mapper V3 для получения полей
-        if (!class_exists('YFGP_Field_Mapper_V3')) {
-            require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-v3.php';
+        // v5.0.0: Use Unified mapper instead of V3
+        if (!class_exists('YFGP_Field_Mapper_Unified')) {
+            require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
         }
         
-        $field_mapper = YFGP_Field_Mapper_V3::get_instance();
+        $field_mapper = YFGP_Field_Mapper_Unified::get_instance();
         $available_fields = $field_mapper->get_available_fields($post_type);
         
         $this->send_json_success_no_bom($available_fields);
@@ -931,12 +931,12 @@ class YFGP_Admin_Page {
             return;
         }
         
-        // 5. Use Field Mapper V3 to get subfields
-        if (!class_exists('YFGP_Field_Mapper_V3')) {
-            require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-v3.php';
+        // 5. v5.0.0: Use Unified mapper instead of V3
+        if (!class_exists('YFGP_Field_Mapper_Unified')) {
+            require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
         }
         
-        $field_mapper = YFGP_Field_Mapper_V3::get_instance();
+        $field_mapper = YFGP_Field_Mapper_Unified::get_instance();
         
         // 6. Get subfields based on source type
         $subfields = array();
