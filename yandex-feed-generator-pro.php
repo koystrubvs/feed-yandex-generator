@@ -220,6 +220,9 @@ class Yandex_Feed_Generator_Pro {
         require_once YFGP_PLUGIN_DIR . 'includes/service-factories.php'; // v4.18.17: Service Factories for service registration
 
         require_once YFGP_PLUGIN_DIR . 'admin/class-admin-page.php';
+        
+        // v5.0.0: Admin AJAX Handlers (вынесены из class-admin-page.php)
+        require_once YFGP_PLUGIN_DIR . 'admin/class-admin-ajax-handlers.php';
 
         // v5.1.0: AJAX Handlers (вынесены из главного файла)
         require_once YFGP_PLUGIN_DIR . 'includes/class-ajax-handlers.php';
