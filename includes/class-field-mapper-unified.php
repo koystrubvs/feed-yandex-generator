@@ -382,6 +382,17 @@ class YFGP_Field_Mapper_Unified {
     }
     
     /**
+     * Alias for getAvailableFields() - snake_case version
+     * 
+     * @since 5.0.0
+     * @param string $post_type Post type
+     * @return array<string, mixed> Available fields
+     */
+    public function get_available_fields($post_type = 'doctors'): array {
+        return $this->getAvailableFields($post_type);
+    }
+    
+    /**
      * Очистить кэш
      * 
      * @since 4.0.0
