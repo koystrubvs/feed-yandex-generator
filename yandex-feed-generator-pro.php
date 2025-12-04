@@ -221,6 +221,8 @@ class Yandex_Feed_Generator_Pro {
 
         require_once YFGP_PLUGIN_DIR . 'admin/class-admin-page.php';
 
+        // v5.1.0: AJAX Handlers (вынесены из главного файла)
+        require_once YFGP_PLUGIN_DIR . 'includes/class-ajax-handlers.php';
     }
 
     
@@ -267,31 +269,10 @@ class Yandex_Feed_Generator_Pro {
 
         
 
-        // AJAX ╤Е╤Г╨║╨╕
-
-        add_action('wp_ajax_yfgp_generate_feed', array($this, 'ajax_generate_feed'));
-
-        add_action('wp_ajax_yfgp_get_fields', array($this, 'ajax_get_fields'));
-
-        add_action('wp_ajax_yfgp_save_mapping', array($this, 'ajax_save_mapping'));
-
-        add_action('wp_ajax_yfgp_get_mapping', array($this, 'ajax_get_mapping'));
-
-        add_action('wp_ajax_yfgp_get_posts_list', array($this, 'ajax_get_posts_list')); // v4.11.0: Test Preview post selector
-
-        add_action('wp_ajax_yfgp_test_mapping', array($this, 'ajax_test_mapping'));
-
-        add_action('wp_ajax_yfgp_save_edited_xml', array($this, 'ajax_save_edited_xml'));
-
-        add_action('wp_ajax_yfgp_export_config', array($this, 'ajax_export_config'));
-
-        add_action('wp_ajax_yfgp_import_config', array($this, 'ajax_import_config'));
-
-        add_action('wp_ajax_yfgp_apply_template', array($this, 'ajax_apply_template'));
-
-        add_action('wp_ajax_yfgp_get_terms', array($this, 'ajax_get_terms'));
-
-        add_action('wp_ajax_yfgp_validate_feed', array($this, 'ajax_validate_feed')); // v4.18.0: ╨Т╨░╨╗╨╕╨┤╨░╤Ж╨╕╤П ╤Д╨╕╨┤╨░
+        // v5.1.0: AJAX хуки вынесены в YFGP_Ajax_Handlers
+        if (class_exists('YFGP_Ajax_Handlers')) {
+            YFGP_Ajax_Handlers::get_instance($this);
+        }
 
         
 
