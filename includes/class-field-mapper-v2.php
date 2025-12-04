@@ -363,6 +363,12 @@ class YFGP_Field_Mapper_V2 {
         $settings = get_option('yfgp_settings', array());
         $is_single_clinic_mode = empty($settings['cpt_clinics']);
         
+        // v5.0.0: Initialize mapper_unified BEFORE clinics/services blocks to avoid undefined variable
+        if (!class_exists('YFGP_Field_Mapper_Unified')) {
+            require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
+        }
+        $mapper_unified = YFGP_Field_Mapper_Unified::get_instance();
+        
         if ($is_single_clinic_mode) {
             // Режим "одна клиника" - извлекаем данные из маппинга напрямую
             // v4.18.22: DEBUG - логируем вызов метода
@@ -393,11 +399,7 @@ class YFGP_Field_Mapper_V2 {
                         );
                         
                         // v4.1.7: UNIVERSAL extraction via V3 mapper (NO HARDCODE!)
-                        if (!class_exists('YFGP_Field_Mapper_Unified')) {
-                            require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
-                        }
-                        
-                        $mapper_unified = YFGP_Field_Mapper_Unified::get_instance();
+                        // v5.0.0: $mapper_unified now initialized above
                         $clinic_mapping = get_option('yfgp_field_mapping_v3', array());
                         
                         // v4.1.9: FIXED - Use CORRECT mapping keys (clinics_*)
