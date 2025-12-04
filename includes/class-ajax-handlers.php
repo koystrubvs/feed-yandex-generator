@@ -424,7 +424,7 @@ class YFGP_Ajax_Handlers {
                 }
                 
                 try {
-                    $value = $mapper_v3->get_field_value($post->ID, $field_config);
+                    $value = $mapper_v3->getFieldValue($post->ID, $field_config);
                     $data[$field_id] = $value;
                     $processed++;
                 } catch (Exception $e) {
