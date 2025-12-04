@@ -194,10 +194,10 @@ class YFGP_Admin_Page {
         );
         
         // v3.3.5: Передаем available fields для ВСЕХ CPT при загрузке (избегаем 81 AJAX!)
-        if (!class_exists('YFGP_Field_Mapper_V3')) {
-            require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-v3.php';
+        if (!class_exists('YFGP_Field_Mapper_Unified')) {
+            require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
         }
-        $field_mapper = YFGP_Field_Mapper_V3::get_instance();
+        $field_mapper = YFGP_Field_Mapper_Unified::get_instance();
         $settings = get_option('yfgp_settings', array());
         
         // v4.18.0: Получаем человекочитаемые названия CPT для индикатора

@@ -1,9 +1,9 @@
 <?php
 /**
- * Класс для управления автоматической генерацией фида по расписанию
+ * Cron Manager - Automatic feed generation scheduling
  * 
  * @package Yandex_Feed_Generator_Pro
- * @version 2.3.2
+ * @version 5.0.0
  */
 
 if (!defined('ABSPATH')) {
@@ -13,89 +13,95 @@ if (!defined('ABSPATH')) {
 class YFGP_Cron_Manager {
     
     /**
-     * Получить доступные интервалы для cron
+     * Cron hook name
+     */
+    private const CRON_HOOK = 'yfgp_auto_update_feed';
+    
+    /**
+     * Get available cron intervals
      * 
-     * @return array<string, mixed> Массив интервалов для UI
+     * @return array<string, string> Intervals for UI
      */
     public function get_intervals(): array {
         $wp_schedules = wp_get_schedules();
         
         $intervals = array(
-            'disabled' => 'Отключено',
+            'disabled' => __('Disabled', 'yandex-feed-generator'),
         );
         
-        // Добавляем стандартные WordPress интервалы
         if (isset($wp_schedules['hourly'])) {
-            $intervals['hourly'] = 'Каждый час';
+            $intervals['hourly'] = __('Hourly', 'yandex-feed-generator');
         }
         if (isset($wp_schedules['twicedaily'])) {
-            $intervals['twicedaily'] = 'Дважды в день';
+            $intervals['twicedaily'] = __('Twice daily', 'yandex-feed-generator');
         }
         if (isset($wp_schedules['daily'])) {
-            $intervals['daily'] = 'Ежедневно';
+            $intervals['daily'] = __('Daily', 'yandex-feed-generator');
         }
         if (isset($wp_schedules['weekly'])) {
-            $intervals['weekly'] = 'Еженедельно';
+            $intervals['weekly'] = __('Weekly', 'yandex-feed-generator');
         }
         
         return $intervals;
     }
     
     /**
-     * Запланировать автоматическое обновление фида
+     * Schedule automatic feed update
      * 
-     * @param string $interval Интервал (hourly, daily, etc)
-     * @return bool
+     * @param string $interval Interval (hourly, daily, etc)
+     * @return bool Success
      */
-    public function schedule_feed_update($interval = 'daily') {
-        // TODO: Будет реализовано в v2.4.0
-        // wp_schedule_event(time(), $interval, 'yfgp_auto_update_feed');
+    public function schedule_feed_update(string $interval = 'daily'): bool {
+        // First unschedule any existing event
+        $this->unschedule_feed_update();
         
-        error_log('YFGP Cron: schedule_feed_update() вызван для interval: ' . $interval);
-        error_log('YFGP Cron: Функционал будет реализован в v2.4.0');
+        if ($interval === 'disabled') {
+            return true;
+        }
+        
+        $result = wp_schedule_event(time(), $interval, self::CRON_HOOK);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('YFGP Cron: Scheduled feed update with interval: ' . $interval);
+        }
+        
+        return $result !== false;
+    }
+    
+    /**
+     * Unschedule automatic feed update
+     * 
+     * @return bool Success
+     */
+    public function unschedule_feed_update(): bool {
+        $timestamp = wp_next_scheduled(self::CRON_HOOK);
+        
+        if ($timestamp) {
+            wp_unschedule_event($timestamp, self::CRON_HOOK);
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('YFGP Cron: Unscheduled feed update');
+            }
+        }
         
         return true;
     }
     
     /**
-     * Отменить автоматическое обновление фида
+     * Check if auto-update is scheduled
      * 
      * @return bool
      */
-    public function unschedule_feed_update() {
-        // TODO: Будет реализовано в v2.4.0
-        // $timestamp = wp_next_scheduled('yfgp_auto_update_feed');
-        // if ($timestamp) {
-        //     wp_unschedule_event($timestamp, 'yfgp_auto_update_feed');
-        // }
-        
-        error_log('YFGP Cron: unschedule_feed_update() вызван');
-        error_log('YFGP Cron: Функционал будет реализован в v2.4.0');
-        
-        return true;
+    public function is_scheduled(): bool {
+        return wp_next_scheduled(self::CRON_HOOK) !== false;
     }
     
     /**
-     * Проверить запланировано ли автообновление
+     * Get next run timestamp
      * 
-     * @return bool
-     */
-    public function is_scheduled() {
-        // TODO: Будет реализовано в v2.4.0
-        // return wp_next_scheduled('yfgp_auto_update_feed') !== false;
-        
-        return false;
-    }
-    
-    /**
-     * Получить время следующего запуска
-     * 
-     * @return int|false Timestamp или false если не запланировано
+     * @return int|false Timestamp or false if not scheduled
      */
     public function get_next_run() {
-        // TODO: Будет реализовано в v2.4.0
-        // return wp_next_scheduled('yfgp_auto_update_feed');
-        
-        return false;
+        return wp_next_scheduled(self::CRON_HOOK);
     }
 }

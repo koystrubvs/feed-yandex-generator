@@ -24,7 +24,7 @@
 
 
 
-// ╨Ч╨░╤Й╨╕╤В╨░ ╨╛╤В ╨┐╤А╤П╨╝╨╛╨│╨╛ ╨┤╨╛╤Б╤В╤Г╨┐╨░
+// Security: Prevent direct access
 
 if (!defined('ABSPATH')) {
 
@@ -34,13 +34,13 @@ if (!defined('ABSPATH')) {
 
 
 
-// ╨Ъ╨╛╨╜╤Б╤В╨░╨╜╤В╤Л ╨┐╨╗╨░╨│╨╕╨╜╨░
+// Plugin constants
 
-define('YFGP_VERSION', '4.20.2'); // v4.20.2: Исправлена обработка checkbox полей (ассоциативные массивы, метки из choices, фильтрация false значений)
+define('YFGP_VERSION', '5.0.0'); // v5.0.0: Major refactoring - removed deprecated methods, consolidated Field Mappers, cleaned up code
 
 if (!defined('YFGP_PLUGIN_DIR')) {
 
-    // v4.18.17: ╨Я╤А╨╛╨▓╨╡╤А╤П╨╡╨╝, ╤З╤В╨╛ ╤Д╤Г╨╜╨║╤Ж╨╕╤П plugin_dir_path ╨┤╨╛╤Б╤В╤Г╨┐╨╜╨░ ╨┐╨╡╤А╨╡╨┤ ╨▓╤Л╨╖╨╛╨▓╨╛╨╝
+    // v4.18.17: Check if plugin_dir_path function exists before calling
 
     if (function_exists('plugin_dir_path')) {
 
@@ -48,7 +48,7 @@ define('YFGP_PLUGIN_DIR', plugin_dir_path(__FILE__));
 
     } else {
 
-        // Fallback: ╨▓╤Л╤З╨╕╤Б╨╗╤П╨╡╨╝ ╨┐╤Г╤В╤М ╨▓╤А╤Г╤З╨╜╤Г╤О
+        // Fallback: calculate path manually
 
         define('YFGP_PLUGIN_DIR', dirname(__FILE__) . '/');
 
@@ -64,7 +64,7 @@ define('YFGP_PLUGIN_URL', plugin_dir_url(__FILE__));
 
     } else {
 
-        // Fallback: ╨▓╤Л╤З╨╕╤Б╨╗╤П╨╡╨╝ URL ╨▓╤А╤Г╤З╨╜╤Г╤О
+        // Fallback: calculate URL manually
 
         $plugin_dir = dirname(__FILE__);
 
@@ -88,7 +88,7 @@ define('YFGP_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
     } else {
 
-        // Fallback: ╨▓╤Л╤З╨╕╤Б╨╗╤П╨╡╨╝ basename ╨▓╤А╤Г╤З╨╜╤Г╤О
+        // Fallback: calculate basename manually
 
         define('YFGP_PLUGIN_BASENAME', basename(dirname(__FILE__)) . '/' . basename(__FILE__));
 
@@ -99,9 +99,7 @@ define('YFGP_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
 
 /**
-
- * ╨У╨╗╨░╨▓╨╜╤Л╨╣ ╨║╨╗╨░╤Б╤Б ╨┐╨╗╨░╨│╨╕╨╜╨░
-
+ * Main Plugin Class
  */
 
 class Yandex_Feed_Generator_Pro {
@@ -109,9 +107,7 @@ class Yandex_Feed_Generator_Pro {
     
 
     /**
-
-     * ╨Х╨┤╨╕╨╜╤Б╤В╨▓╨╡╨╜╨╜╤Л╨╣ ╤Н╨║╨╖╨╡╨╝╨┐╨╗╤П╤А ╨║╨╗╨░╤Б╤Б╨░
-
+     * Singleton instance
      */
 
     private static $instance = null;
@@ -119,9 +115,7 @@ class Yandex_Feed_Generator_Pro {
     
 
     /**
-
-     * ╨Я╨╛╨╗╤Г╤З╨╕╤В╤М ╤Н╨║╨╖╨╡╨╝╨┐╨╗╤П╤А ╨║╨╗╨░╤Б╤Б╨░
-
+     * Get singleton instance
      */
 
     public static function get_instance() {
@@ -139,9 +133,7 @@ class Yandex_Feed_Generator_Pro {
     
 
     /**
-
-     * ╨Ъ╨╛╨╜╤Б╤В╤А╤Г╨║╤В╨╛╤А
-
+     * Constructor
      */
 
     private function __construct() {
@@ -155,44 +147,42 @@ class Yandex_Feed_Generator_Pro {
     
 
     /**
-
-     * ╨Ч╨░╨│╤А╤Г╨╖╨║╨░ ╨╖╨░╨▓╨╕╤Б╨╕╨╝╨╛╤Б╤В╨╡╨╣
-
+     * Load dependencies
      */
 
     private function load_dependencies() {
 
-        // v4.18.22: Constants Class (╨╖╨░╨╝╨╡╨╜╨░ ╨╝╨░╨│╨╕╤З╨╡╤Б╨║╨╕╤Е ╤З╨╕╤Б╨╡╨╗/╤Б╤В╤А╨╛╨║)
+        // v4.18.22: Constants Class (magic numbers replacement)
         require_once YFGP_PLUGIN_DIR . 'includes/class-constants.php';
 
-        // v4.18.22: Logger Class (╤Ж╨╡╨╜╤В╤А╨░╨╗╨╕╨╖╨╛╨▓╨░╨╜╨╜╨╛╨╡ ╨╗╨╛╨│╨╕╤А╨╛╨▓╨░╨╜╨╕╨╡ ╤Б ╨░╨│╤А╨╡╨│╨░╤Ж╨╕╨╡╨╣)
+        // v4.18.22: Logger Class (centralized logging with aggregation)
         require_once YFGP_PLUGIN_DIR . 'includes/class-logger.php';
 
-        // v4.18.22: Mapping Config Validator (╨▓╨░╨╗╨╕╨┤╨░╤Ж╨╕╤П ╨║╨╛╨╜╤Д╨╕╨│╤Г╤А╨░╤Ж╨╕╨╕ ╨╝╨░╨┐╨┐╨╕╨╜╨│╨░, SQL injection protection)
+        // v4.18.22: Mapping Config Validator (mapping config validation, SQL injection protection)
         require_once YFGP_PLUGIN_DIR . 'includes/class-mapping-config-validator.php';
 
-        // v4.18.22: Encoding Normalizer (╨╜╨╛╤А╨╝╨░╨╗╨╕╨╖╨░╤Ж╨╕╤П UTF-8 ╨┤╨╗╤П ╨║╨╕╤А╨╕╨╗╨╗╨╕╤Ж╤Л)
+        // v4.18.22: Encoding Normalizer (UTF-8 normalization for Cyrillic)
         require_once YFGP_PLUGIN_DIR . 'includes/helpers/encoding-normalizer.php';
         
-        // v4.20.0: JetEngine Helper (╨░╨▒╤Б╤В╤А╨░╨║╤Ж╨╕╤П ╨╜╨░╨┤ JetEngine API)
+        // v4.20.0: JetEngine Helper (JetEngine API abstraction)
         require_once YFGP_PLUGIN_DIR . 'includes/helpers/class-jetengine-helper.php';
         
-        // v4.20.0: ACF Compatibility Helper (╨┐╨╛╨┤╨┤╨╡╤А╨╢╨║╨░ ACF 6.2.6+ escape_html)
+        // v4.20.0: ACF Compatibility Helper (ACF 6.2.6+ escape_html support)
         require_once YFGP_PLUGIN_DIR . 'includes/helpers/acf-compat.php';
         
-        // v4.20.0: Relationship Prefetcher (batch ╨╖╨░╨│╤А╤Г╨╖╨║╨░ relationships ╨┤╨╗╤П ╤А╨╡╤И╨╡╨╜╨╕╤П N+1 query problem)
+        // v4.20.0: Relationship Prefetcher (batch relationships loading to solve N+1 query problem)
         require_once YFGP_PLUGIN_DIR . 'includes/class-relationship-prefetcher.php';
         
-        // v4.20.0: Cache Warmer (╨┐╤А╨╡╨┤╨╖╨░╨│╤А╤Г╨╖╨║╨░ ╨║╤Н╤И╨╡╨╣ ╨┤╨╗╤П ╤Г╨╗╤Г╤З╤И╨╡╨╜╨╕╤П ╨┐╤А╨╛╨╕╨╖╨▓╨╛╨┤╨╕╤В╨╡╨╗╤М╨╜╨╛╤Б╤В╨╕ ╨┐╨╡╤А╨▓╨╛╨╣ ╨│╨╡╨╜╨╡╤А╨░╤Ж╨╕╨╕)
+        // v4.20.0: Cache Warmer (cache preloading for first generation performance)
         require_once YFGP_PLUGIN_DIR . 'includes/class-cache-warmer.php';
 
-        // v4.18.22: Data Sanitizer (╤Б╨░╨╜╨╕╤В╨╕╨╖╨░╤Ж╨╕╤П ╨┤╨░╨╜╨╜╤Л╤Е ╨┐╨╡╤А╨╡╨┤ ╨▓╤Л╨▓╨╛╨┤╨╛╨╝ ╨▓ XML/UI)
+        // v4.18.22: Data Sanitizer (data sanitization before XML/UI output)
         require_once YFGP_PLUGIN_DIR . 'includes/class-data-sanitizer.php';
 
-        // v4.18.22: Post Batch Loader (╨┐╨░╨║╨╡╤В╨╜╨░╤П ╨╖╨░╨│╤А╤Г╨╖╨║╨░ ╨┐╨╛╤Б╤В╨╛╨▓ ╨┤╨╗╤П ╨┐╤А╨╡╨┤╨╛╤В╨▓╤А╨░╤Й╨╡╨╜╨╕╤П OOM)
+        // v4.18.22: Post Batch Loader (batch post loading to prevent OOM)
         require_once YFGP_PLUGIN_DIR . 'includes/class-post-batch-loader.php';
 
-        // ╨в╨╛╨╗╤М╨║╨╛ v2 ╨▓╨╡╤А╤Б╨╕╨╕ ╨║╨╗╨░╤Б╤Б╨╛╨▓
+        // v2 classes only
 
         require_once YFGP_PLUGIN_DIR . 'includes/class-feed-generator-v2.php';
 
@@ -200,22 +190,20 @@ class Yandex_Feed_Generator_Pro {
 
         require_once YFGP_PLUGIN_DIR . 'includes/specialities-reference.php';
 
-        require_once YFGP_PLUGIN_DIR . 'includes/class-cron-manager.php'; // v2.3.2: ╨Я╨╛╨┤╨║╨╗╤О╤З╨╡╨╜╨╕╨╡ Cron Manager
-
-// DISABLED v4.18.0-hotfix1: Unused class causing headers warnings -         require_once YFGP_PLUGIN_DIR . 'includes/helpers/class-universal-field-loader.php'; // v4.18.0: Universal Field Loader
+        require_once YFGP_PLUGIN_DIR . 'includes/class-cron-manager.php'; // v2.3.2: Cron Manager
 
         require_once YFGP_PLUGIN_DIR . 'includes/class-migration.php'; // v4.18.0: Migration Manager
 
         require_once YFGP_PLUGIN_DIR . 'includes/class-error-handler.php'; // v4.18.0: Error Handler
 
-        // v4.18.21: Sentry Integration ╨┤╨╗╤П ╨╝╨╛╨╜╨╕╤В╨╛╤А╨╕╨╜╨│╨░ ╨╛╤И╨╕╨▒╨╛╨║
-        // ╨Ч╨░╨│╤А╤Г╨╢╨░╨╡╨╝ Composer autoload ╨┤╨╗╤П Sentry SDK (╨╡╤Б╨╗╨╕ ╤Г╤Б╤В╨░╨╜╨╛╨▓╨╗╨╡╨╜)
+        // v4.18.21: Sentry Integration for error monitoring
+        // Load Composer autoload for Sentry SDK (if installed)
         $vendor_autoload = YFGP_PLUGIN_DIR . 'vendor/autoload.php';
         if (file_exists($vendor_autoload)) {
             try {
                 require_once $vendor_autoload;
             } catch (\Throwable $e) {
-                // ╨Ш╨│╨╜╨╛╤А╨╕╤А╤Г╨╡╨╝ ╨╛╤И╨╕╨▒╨║╨╕ ╨╖╨░╨│╤А╤Г╨╖╨║╨╕ autoload, ╤З╤В╨╛╨▒╤Л ╨╜╨╡ ╨╗╨╛╨╝╨░╤В╤М ╨┐╨╗╨░╨│╨╕╨╜
+                // Ignore autoload errors to prevent plugin breakage
                 if (function_exists('error_log') && defined('WP_DEBUG') && WP_DEBUG) {
                     error_log('YFGP: Failed to load vendor/autoload.php: ' . $e->getMessage());
                 }
@@ -223,13 +211,13 @@ class Yandex_Feed_Generator_Pro {
         }
         require_once YFGP_PLUGIN_DIR . 'includes/class-sentry-integration.php'; // v4.18.21: Sentry Integration
 
-        require_once YFGP_PLUGIN_DIR . 'includes/class-entity-manager.php'; // v4.18.11: Entity Manager ╨┤╨╗╤П ╤А╨░╤Б╤И╨╕╤А╤П╨╡╨╝╨╛╤Б╤В╨╕
+        require_once YFGP_PLUGIN_DIR . 'includes/class-entity-manager.php'; // v4.18.11: Entity Manager for extensibility
 
-        // v4.18.17: Service Container ╨╕ service-factories ╨┤╨╗╤П DI (╤А╨╡╤Д╨░╨║╤В╨╛╤А╨╕╨╜╨│)
+        // v4.18.17: Service Container and factories for DI (refactoring)
 
-        require_once YFGP_PLUGIN_DIR . 'includes/class-service-container.php'; // v4.18.17: Service Container ╨┤╨╗╤П DI
+        require_once YFGP_PLUGIN_DIR . 'includes/class-service-container.php'; // v4.18.17: Service Container for DI
 
-        require_once YFGP_PLUGIN_DIR . 'includes/service-factories.php'; // v4.18.17: Service Factories ╨┤╨╗╤П ╤А╨╡╨│╨╕╤Б╤В╤А╨░╤Ж╨╕╨╕ ╤Б╨╡╤А╨▓╨╕╤Б╨╛╨▓
+        require_once YFGP_PLUGIN_DIR . 'includes/service-factories.php'; // v4.18.17: Service Factories for service registration
 
         require_once YFGP_PLUGIN_DIR . 'admin/class-admin-page.php';
 
@@ -238,15 +226,13 @@ class Yandex_Feed_Generator_Pro {
     
 
     /**
-
-     * ╨Ш╨╜╨╕╤Ж╨╕╨░╨╗╨╕╨╖╨░╤Ж╨╕╤П ╤Е╤Г╨║╨╛╨▓
-
+     * Initialize hooks
      */
 
     private function init_hooks() {
 
-        // v4.18.21: ╨Ш╨╜╨╕╤Ж╨╕╨░╨╗╨╕╨╖╨░╤Ж╨╕╤П Sentry ╨┐╨╛╤Б╨╗╨╡ ╨┐╨╛╨╗╨╜╨╛╨╣ ╨╖╨░╨│╤А╤Г╨╖╨║╨╕ WordPress
-        // ╨Ш╤Б╨┐╨╛╨╗╤М╨╖╤Г╨╡╨╝ 'init' ╨▓╨╝╨╡╤Б╤В╨╛ 'plugins_loaded' ╨┤╨╗╤П ╨▒╨╛╨╗╤М╤И╨╡╨╣ ╨▒╨╡╨╖╨╛╨┐╨░╤Б╨╜╨╛╤Б╤В╨╕
+        // v4.18.21: Initialize Sentry after full WordPress load
+        // Using 'init' instead of 'plugins_loaded' for better safety
         add_action('init', array($this, 'init_sentry'), 20);
 
         // v4.18.0: ╨Т╤Л╨┐╨╛╨╗╨╜╨╡╨╜╨╕╨╡ ╨╝╨╕╨│╤А╨░╤Ж╨╕╨╕ CPT ╨╜╨░╤Б╤В╤А╨╛╨╡╨║ ╨┐╤А╨╕ ╨╕╨╜╨╕╤Ж╨╕╨░╨╗╨╕╨╖╨░╤Ж╨╕╨╕
@@ -263,7 +249,7 @@ class Yandex_Feed_Generator_Pro {
 
         
 
-        // ╨Р╨┤╨╝╨╕╨╜-╨┐╨░╨╜╨╡╨╗╤М
+        // Admin panel
 
         if (is_admin() && class_exists('YFGP_Admin_Page')) {
 
@@ -327,13 +313,13 @@ class Yandex_Feed_Generator_Pro {
 
     /**
 
-     * ╨Р╨║╤В╨╕╨▓╨░╤Ж╨╕╤П ╨┐╨╗╨░╨│╨╕╨╜╨░
+     * Plugin activation
 
      */
 
     public function activate() {
 
-        // ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ ╨┐╨░╨┐╨║╨╕ ╨┤╨╗╤П ╤Д╨╕╨┤╨╛╨▓
+        // Create feeds directory
 
         $upload_dir = wp_upload_dir();
 
@@ -349,7 +335,7 @@ class Yandex_Feed_Generator_Pro {
 
         
 
-        // ╨Э╨░╤Б╤В╤А╨╛╨╣╨║╨╕ ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О
+        // Default settings
 
         $default_settings = array(
 
@@ -377,7 +363,7 @@ class Yandex_Feed_Generator_Pro {
 
         
 
-        // ╨Я╨╗╨░╨╜╨╕╤А╨╛╨▓╨░╨╜╨╕╨╡ ╨░╨▓╤В╨╛╨╛╨▒╨╜╨╛╨▓╨╗╨╡╨╜╨╕╤П
+        // Schedule auto-update
 
         if (!wp_next_scheduled('yfgp_auto_update_feed')) {
 
@@ -391,13 +377,13 @@ class Yandex_Feed_Generator_Pro {
 
     /**
 
-     * ╨Ф╨╡╨░╨║╤В╨╕╨▓╨░╤Ж╨╕╤П ╨┐╨╗╨░╨│╨╕╨╜╨░
+     * Plugin deactivation
 
      */
 
     public function deactivate() {
 
-        // ╨г╨┤╨░╨╗╨╡╨╜╨╕╨╡ ╨╖╨░╨┐╨╗╨░╨╜╨╕╤А╨╛╨▓╨░╨╜╨╜╤Л╤Е ╨╖╨░╨┤╨░╤З
+        // Remove scheduled hooks
 
         wp_clear_scheduled_hook('yfgp_auto_update_feed');
 
@@ -1262,17 +1248,17 @@ class Yandex_Feed_Generator_Pro {
 
             
 
-            // v3.4.9: Use Field Mapper V3 for proper handling of v3 mapping format
+            // v5.0.0: Use Unified Field Mapper directly
 
-            if (!class_exists('YFGP_Field_Mapper_V3')) {
+            if (!class_exists('YFGP_Field_Mapper_Unified')) {
 
-                require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-v3.php';
+                require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
 
             }
 
             
 
-            $mapper_v3 = YFGP_Field_Mapper_V3::get_instance();
+            $mapper_v3 = YFGP_Field_Mapper_Unified::get_instance();
 
             $mapping = get_option('yfgp_field_mapping_v3', array());
             // v4.18.18: Fix PHP 8+ count() error - get_option can return false, ensure array
@@ -1284,7 +1270,7 @@ class Yandex_Feed_Generator_Pro {
 
             
 
-            // ╨б╨╛╨▒╨╕╤А╨░╨╡╨╝ ╨┤╨░╨╜╨╜╤Л╨╡ ╨╕╤Б╨┐╨╛╨╗╤М╨╖╤Г╤П V3 API (╨┐╨╛ ╨╛╨┤╨╜╨╛╨╝╤Г ╨┐╨╛╨╗╤О)
+            // Collect data using V3 API (per field)
 
             $data = array();
 

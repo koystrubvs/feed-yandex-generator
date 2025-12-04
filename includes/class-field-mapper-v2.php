@@ -16,13 +16,15 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Загрузить Unified класс
+// Load Unified class
 require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper-unified.php';
 
-// Загрузить старый базовый класс (для наследования helper методов)
-require_once YFGP_PLUGIN_DIR . 'includes/class-field-mapper.php';
-
-class YFGP_Field_Mapper_V2 extends YFGP_Field_Mapper {
+/**
+ * Field Mapper V2 - Adapter for V2 Production
+ * 
+ * v5.0.0: Removed inheritance from YFGP_Field_Mapper, now standalone class
+ */
+class YFGP_Field_Mapper_V2 {
     
     /**
      * Unified mapper instance
@@ -635,11 +637,96 @@ class YFGP_Field_Mapper_V2 extends YFGP_Field_Mapper {
     }
     
     // ========================================================================
-    // HELPER METHODS - НАСЛЕДУЮТСЯ ОТ БАЗОВОГО КЛАССА
+    // HELPER METHODS (v5.0.0: moved from base class)
     // ========================================================================
-    
-    // calculate_experience() - наследуется от YFGP_Field_Mapper
-    // get_set_ids() - наследуется от YFGP_Field_Mapper
+
+    /**
+     * Calculate work experience from date or years string
+     * 
+     * @param mixed $value Date string or years number
+     * @return string Experience in years
+     */
+    protected function calculate_experience($value): string {
+        if (empty($value)) {
+            return '0';
+        }
+        
+        if (is_numeric($value)) {
+            return (string)intval($value);
+        }
+        
+        // YYYY-MM-DD format
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value)) {
+            $start_date = strtotime($value);
+            if ($start_date !== false) {
+                $years = floor((time() - $start_date) / (365 * 24 * 60 * 60));
+                return (string)max(0, $years);
+            }
+        }
+        
+        // DD/MM/YYYY format
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+.*)?$/', $value, $matches)) {
+            $year = (int)$matches[3];
+            $current_year = (int)date('Y');
+            if ($year >= 1900 && $year <= $current_year) {
+                $start_date = strtotime(sprintf('%04d-%02d-%02d', $year, (int)$matches[2], (int)$matches[1]));
+                if ($start_date !== false) {
+                    $years = floor((time() - $start_date) / (365 * 24 * 60 * 60));
+                    return (string)max(0, $years);
+                }
+            }
+        }
+        
+        // Text format like "15 лет"
+        if (preg_match('/^(\d+)\s*(?:лет|год|года|years?)?$/i', $value, $matches)) {
+            return $matches[1];
+        }
+        
+        return '0';
+    }
+
+    /**
+     * Get set-id for specialization (Yandex format)
+     * 
+     * @param mixed $specialization Specialization text or array
+     * @return string Set ID slug
+     */
+    protected function get_set_ids($specialization): string {
+        if (empty($specialization)) {
+            return $this->get_fallback_speciality_slug();
+        }
+        
+        if (is_array($specialization)) {
+            if (isset($specialization['slug'])) {
+                $specialization = $specialization['slug'];
+            } elseif (isset($specialization['name'])) {
+                $specialization = $specialization['name'];
+            } else {
+                $specialization = implode(', ', $specialization);
+            }
+        }
+        
+        $mapping = array(
+            'стоматолог' => 'stomatolog',
+            'терапевт' => 'stomatolog-terapevt',
+            'хирург' => 'stomatolog-khirurg',
+            'ортопед' => 'stomatolog-ortoped',
+            'ортодонт' => 'ortodont',
+            'пародонтолог' => 'parodontolog',
+            'имплантолог' => 'implantolog',
+            'детский стоматолог' => 'detskii-stomatolog',
+        );
+        
+        $spec_lower = mb_strtolower(trim($specialization));
+        
+        foreach ($mapping as $keyword => $set_id) {
+            if (strpos($spec_lower, $keyword) !== false) {
+                return $set_id;
+            }
+        }
+        
+        return $this->get_fallback_speciality_slug();
+    }
 
     /**
      * Получить fallback значение для специализации

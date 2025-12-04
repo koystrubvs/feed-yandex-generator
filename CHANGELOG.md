@@ -1,5 +1,39 @@
 # 📝 Changelog - Yandex Feed Generator Pro
 
+## Версия 5.0.0 - Major Refactoring (04.12.2025)
+
+### 🔧 Рефакторинг:
+
+1. **Удалены deprecated методы из `class-feed-generator-v2.php`**
+   - `collect_entities()` - заменён на YFGP_Entity_Collector
+   - `build_offers_v2()` - заменён на YFGP_Offer_Builder
+   - `find_base_service()`, `handle_no_services()`, `find_any_service_with_price()`
+   - `is_service_suitable_for_primary_removed()`
+
+2. **Консолидация Field Mappers**
+   - Удалён `class-field-mapper.php` (базовый класс)
+   - Удалён `class-field-mapper-v3.php` (прокси)
+   - `YFGP_Field_Mapper_V2` теперь standalone класс с собственными helper методами
+   - Все вызовы V3 заменены на прямое использование `YFGP_Field_Mapper_Unified`
+
+3. **Исправлены кракозябры в комментариях**
+   - Главные комментарии переведены на английский
+   - Улучшена читаемость кода
+
+4. **Очистка мёртвого кода**
+   - Удалён `class-universal-field-loader.php` (не использовался)
+   - Реализован `YFGP_Cron_Manager` (вместо заглушек v2.4.0)
+
+### 📊 Статистика:
+
+| Метрика | До | После |
+|---------|-----|-------|
+| class-feed-generator-v2.php | 4158 строк | ~3700 строк |
+| Field Mapper файлов | 4 | 2 |
+| Deprecated методов | 8+ | 0 |
+
+---
+
 ## Версия 2.4.1 - Исправление маппинга полей (20.10.2025)
 
 ### 🐛 Исправлено:
