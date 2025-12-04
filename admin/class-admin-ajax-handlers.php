@@ -441,11 +441,16 @@ class YFGP_Admin_Ajax_Handlers {
                 // Получить список услуг для этого врача
                 $doctor_services = $this->get_doctor_services($post->ID, $mapping, $services_cpt, $default_service_name);
                 
-                $doctors[] = array(
+                // Добавить список услуг к каждой специализации
+                foreach ($specializations as &$spec) {
+                    $spec['services'] = $doctor_services;
+                }
+                unset($spec); // Убрать ссылку
+                
+                $doctors['doctor_' . $post->ID] = array(
                     'id' => $post->ID,
                     'name' => $post->post_title,
                     'specializations' => $specializations,
-                    'services' => $doctor_services,
                 );
             }
         }
