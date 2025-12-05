@@ -1293,17 +1293,25 @@ try {
         this.fieldName
       );
 
-      // v4.18.22: CRITICAL FIX - Find relationship section first, then find nested_field inside it
-      // This is more reliable than searching the entire container
+      // v4.19.0: CRITICAL FIX - Find ONLY the correct relationship section based on current source_type
+      // Previous bug: selector ".yfgp-config-relationship-1, .yfgp-config-relationship-2" found BOTH sections!
+      const currentSourceType = this.currentConfig.source_type || "relationship_1";
       const $relationshipSection = this.container.find(
-        ".yfgp-config-relationship-1, .yfgp-config-relationship-2"
+        `.yfgp-config-section[data-source-type="${currentSourceType}"]`
       );
       
       if ($relationshipSection.length === 0) {
-        console.error("❌ [loadCPTFields] Relationship section not found in container for:", this.fieldName);
+        console.error("❌ [loadCPTFields] Relationship section not found for source_type:", currentSourceType);
         console.error("  ↳ Container:", this.container);
-        console.error("  ↳ Container HTML:", this.container.html().substring(0, 200));
+        console.error("  ↳ Field name:", this.fieldName);
         return;
+      }
+      
+      // v4.19.0: CRITICAL FIX - Hide the OTHER relationship section to prevent UI glitches
+      if (currentSourceType === "relationship_1") {
+        this.container.find(".yfgp-config-relationship-2").hide();
+      } else if (currentSourceType === "relationship_2") {
+        this.container.find(".yfgp-config-relationship-1").hide();
       }
       
       // v4.18.22: CRITICAL FIX - Ensure section is visible BEFORE searching for nested_field
@@ -1650,7 +1658,61 @@ try {
               // Восстанавливаем source_cpt только для типов, которые его используют
               this.container.find(".yfgp-source-cpt").val(savedSourceCpt);
 
-            // Trigger loadCPTFields for ALL relationship types (relationship, relationship_1)
+            // v4.19.0: Handle relationship_2 type (needs special handling for second_relationship, second_cpt)
+            if (config.source_type === "relationship_2") {
+              logDebug("🔄 [relationship_2] Restoring for field:", this.fieldName);
+              
+              const self = this;
+              const savedSecondRelationship = config.second_relationship;
+              const savedSecondCpt = config.second_cpt;
+              
+              logDebug("  ↳ savedSecondRelationship:", savedSecondRelationship);
+              logDebug("  ↳ savedSecondCpt:", savedSecondCpt);
+              logDebug("  ↳ savedNestedField:", savedNestedField);
+              
+              // Step 1: Load relationships for first CPT (to populate "Вторая связь" dropdown)
+              this.loadRelationshipsForCPT(savedSourceCpt, ".yfgp-second-relationship").then(() => {
+                logDebug("  ↳ Relationships loaded for CPT:", savedSourceCpt);
+                
+                // Step 2: Restore second_relationship
+                if (savedSecondRelationship) {
+                  setTimeout(() => {
+                    self.container.find(".yfgp-second-relationship").val(savedSecondRelationship);
+                    self.currentConfig.second_relationship = savedSecondRelationship;
+                    logDebug("  ↳ second_relationship restored:", savedSecondRelationship);
+                    
+                    // Step 3: Restore second_cpt
+                    if (savedSecondCpt) {
+                      self.container.find(".yfgp-second-cpt").val(savedSecondCpt);
+                      self.currentConfig.second_cpt = savedSecondCpt;
+                      logDebug("  ↳ second_cpt restored:", savedSecondCpt);
+                      
+                      // Step 4: Load fields for second CPT (to populate "Вложенное поле" dropdown)
+                      self.loadCPTFields(savedSecondCpt).then(() => {
+                        logDebug("  ↳ CPT fields loaded for:", savedSecondCpt);
+                        
+                        // Step 5: Restore nested_field
+                        if (savedNestedField) {
+                          setTimeout(() => {
+                            const $nestedField = self.container.find(".yfgp-config-relationship-2 .yfgp-nested-field");
+                            $nestedField.val(savedNestedField);
+                            self.currentConfig.nested_field = savedNestedField;
+                            logDebug("  ↳ nested_field restored:", savedNestedField);
+                            self.updatePreview();
+                          }, 100);
+                        }
+                      }).catch((err) => {
+                        console.error("❌ [relationship_2] Failed to load CPT fields:", err);
+                      });
+                    }
+                  }, 100);
+                }
+              }).catch((err) => {
+                console.error("❌ [relationship_2] Failed to load relationships:", err);
+              });
+            }
+            
+            // Trigger loadCPTFields for relationship and relationship_1 types
             // v4.1.0-beta11: CRITICAL FIX - AWAIT loadCPTFields() before attempting to restore nested_field
             if (
               config.source_type === "relationship" ||
@@ -1678,10 +1740,16 @@ try {
                     return;
                   }
                   
-                  // v4.18.43 → v4.18.52: Force show the section and re-check visibility without noisy warnings
+                  // v4.18.43 → v4.19.0: Force show the section and HIDE the other relationship section
                   const ensureVisible = () => {
                     $relationshipSection.show();
                     $relationshipSection.css("display", "block");
+                    // v4.19.0: CRITICAL FIX - Hide the OTHER relationship section to prevent UI glitches
+                    if (config.source_type === "relationship_1") {
+                      self.container.find(".yfgp-config-relationship-2").hide();
+                    } else if (config.source_type === "relationship_2") {
+                      self.container.find(".yfgp-config-relationship-1").hide();
+                    }
                   };
 
                   const waitAttempts = 5;

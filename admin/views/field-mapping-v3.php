@@ -656,7 +656,21 @@ $offer_config = get_option('yfgp_offer_config', array());
         <!-- ====================== TAB 1: ВРАЧИ ====================== -->
         <div id="tab-doctors" class="yfgp-tab-content yfgp-tab-active">
             
-            <!-- Обязательные поля -->
+            <!-- Подвкладки врачей -->
+            <div class="yfgp-subtab-wrapper">
+                <a href="#" class="yfgp-subtab yfgp-subtab-active" data-subtab="doctors-required">
+                    ⚠️ Обязательные поля
+                </a>
+                <a href="#" class="yfgp-subtab" data-subtab="doctors-optional">
+                    📋 Необязательные поля
+                </a>
+                <a href="#" class="yfgp-subtab" data-subtab="doctors-repeater">
+                    🔁 Образование, работа, сертификаты, отзывы
+                </a>
+            </div>
+            
+            <!-- Подвкладка 1: Обязательные поля -->
+            <div id="subtab-doctors-required" class="yfgp-subtab-content yfgp-subtab-active">
             <div class="yfgp-mapping-section">
                 <h2 style="color: #d63638;">⚠️ Обязательные поля врача</h2>
                 <p class="description">Эти поля должны быть заполнены для корректной работы фида</p>
@@ -695,9 +709,11 @@ $offer_config = get_option('yfgp_offer_config', array());
                     <?php endforeach; ?>
                 </div>
             </div>
+            </div><!-- /subtab-doctors-required -->
 
-            <!-- Необязательные поля -->
-            <div class="yfgp-mapping-section" style="margin-top: 30px;">
+            <!-- Подвкладка 2: Необязательные поля -->
+            <div id="subtab-doctors-optional" class="yfgp-subtab-content">
+            <div class="yfgp-mapping-section">
                 <h2 style="color: #2271b1;">📋 Необязательные поля врача</h2>
                 <p class="description">Заполните для более полной информации в фиде</p>
                 
@@ -733,9 +749,11 @@ $offer_config = get_option('yfgp_offer_config', array());
                     <?php endforeach; ?>
                 </div>
             </div>
+            </div><!-- /subtab-doctors-optional -->
             
-            <!-- Repeater блоки -->
-            <div class="yfgp-mapping-section" style="margin-top: 30px;">
+            <!-- Подвкладка 3: Repeater блоки -->
+            <div id="subtab-doctors-repeater" class="yfgp-subtab-content">
+            <div class="yfgp-mapping-section">
                 <h2 style="color: #8b5cf6;">🔁 Образование, работа, сертификаты, отзывы</h2>
                 <p class="description">
                     <strong>v3.0:</strong> Источник данных для этих полей настраивается на странице 
@@ -823,6 +841,7 @@ $offer_config = get_option('yfgp_offer_config', array());
                     <?php endforeach; ?>
                 </div>
             </div>
+            </div><!-- /subtab-doctors-repeater -->
         </div>
         
         <!-- ====================== TAB 2: КЛИНИКИ ====================== -->
@@ -1459,6 +1478,52 @@ $offer_config = get_option('yfgp_offer_config', array());
     display: block;
 }
 
+/* Sub-Tab Navigation (для врачей) */
+.yfgp-subtab-wrapper {
+    display: flex;
+    gap: 0;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #c3c4c7;
+    background: #f6f7f7;
+    border-radius: 6px 6px 0 0;
+    overflow: hidden;
+}
+
+.yfgp-subtab {
+    padding: 12px 20px;
+    text-decoration: none;
+    color: #50575e;
+    font-weight: 500;
+    font-size: 13px;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.yfgp-subtab:hover {
+    background: #fff;
+    color: #2271b1;
+}
+
+.yfgp-subtab.yfgp-subtab-active {
+    background: #fff;
+    color: #2271b1;
+    border-bottom-color: #2271b1;
+    font-weight: 600;
+}
+
+/* Sub-Tab Content */
+.yfgp-subtab-content {
+    display: none;
+}
+
+.yfgp-subtab-content.yfgp-subtab-active {
+    display: block;
+}
+
 /* Mapping Grid */
 .yfgp-mapping-grid {
     display: grid;
@@ -1833,6 +1898,22 @@ jQuery(document).ready(function($) {
         // Update content
         $('.yfgp-tab-content').removeClass('yfgp-tab-active');
         $('#tab-' + tabId).addClass('yfgp-tab-active');
+    });
+    
+    // Sub-Tab Switching (для врачей)
+    $('.yfgp-subtab').on('click', function(e) {
+        e.preventDefault();
+        
+        var subtabId = $(this).data('subtab');
+        var $wrapper = $(this).closest('.yfgp-tab-content');
+        
+        // Update sub-tab navigation
+        $wrapper.find('.yfgp-subtab').removeClass('yfgp-subtab-active');
+        $(this).addClass('yfgp-subtab-active');
+        
+        // Update sub-tab content
+        $wrapper.find('.yfgp-subtab-content').removeClass('yfgp-subtab-active');
+        $wrapper.find('#subtab-' + subtabId).addClass('yfgp-subtab-active');
     });
     
     // Initialize Dynamic Field Selectors V3
